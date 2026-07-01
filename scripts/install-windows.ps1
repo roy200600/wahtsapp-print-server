@@ -47,7 +47,7 @@ function Initialize-NodeRuntime($ProjectRoot) {
     throw "Could not find a Windows x64 Node.js LTS download."
   }
 
-  $ZipUrl = "https://nodejs.org/dist/$($Version.version)/$($Version.version)-win-x64.zip"
+  $ZipUrl = "https://nodejs.org/dist/$($Version.version)/node-$($Version.version)-win-x64.zip"
   Invoke-WebRequest -Uri $ZipUrl -OutFile $NodeZip
   Expand-Archive -Path $NodeZip -DestinationPath $ExtractRoot -Force
 
