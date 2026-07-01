@@ -56,6 +56,12 @@ export const defaultCustomerMessages = {
   ].join("\n")
 } as const;
 
+export const defaultCustomerMarketing = {
+  enabled: false,
+  message: "",
+  delayMinutes: 5
+} as const;
+
 export const defaultConfig: AppConfig = {
   printerName: "",
   language: "he",
@@ -69,6 +75,7 @@ export const defaultConfig: AppConfig = {
   sendWhatsappReply: false,
   allowGroupPrinting: false,
   customerMessages: defaultCustomerMessages,
+  customerMarketing: defaultCustomerMarketing,
   copies: 1,
   duplex: false,
   color: true,
@@ -146,7 +153,7 @@ function normalizeConfig(config: AppConfig): AppConfig {
   const customerMessages = normalizeCustomerMessages(config.customerMessages);
   return {
     ...config,
-    language: pick(config.language, ["he", "en", "ru"], defaultConfig.language),
+    language: pick(config.language, ["he", "en"], defaultConfig.language),
     adminPassword: String(config.adminPassword || ""),
     allowedNumbers: config.allowedNumbers.map(normalizePhone).filter(Boolean),
     allowedGroups: config.allowedGroups.map((group) => group.trim()).filter(Boolean),
@@ -155,6 +162,7 @@ function normalizeConfig(config: AppConfig): AppConfig {
     alertsEnabled: Boolean(config.alertsEnabled && normalizeAlertPhone(config.alertsPhone)),
     allowGroupPrinting: Boolean(config.allowGroupPrinting),
     customerMessages,
+    customerMarketing: normalizeCustomerMarketing(config.customerMarketing),
     officePrintProfile: normalizeOfficePrintProfile(config.officePrintProfile),
     printerRoles: normalizePrinterRoles(config.printerRoles, config.printerName),
     printerProfiles: normalizePrinterProfiles(config),
@@ -163,6 +171,7 @@ function normalizeConfig(config: AppConfig): AppConfig {
     branding: normalizeBranding(config.branding),
     maxFileSizeMB: Number(config.maxFileSizeMB) || defaultConfig.maxFileSizeMB,
     copies: Math.max(1, Number(config.copies) || 1),
+    sumatraPdfPath: String(config.sumatraPdfPath || defaultConfig.sumatraPdfPath),
     pdfPrintProfile,
     port: Number(config.port) || defaultConfig.port
   };
@@ -277,8 +286,25 @@ function normalizeEmail(email: Partial<AppConfig["email"]> | undefined) {
 function normalizeCustomerMessages(messages: Partial<AppConfig["customerMessages"]> | undefined) {
   return {
     ...defaultCustomerMessages,
-    ...(messages ?? {})
+    ...(messages ?? {}),
+    promo: defaultCustomerMessages.promo
   };
+}
+
+function normalizeCustomerMarketing(marketing: Partial<AppConfig["customerMarketing"]> | undefined) {
+  const normalized = { ...defaultCustomerMarketing, ...(marketing ?? {}) };
+  const delayMinutes = Number(normalized.delayMinutes);
+  return {
+    enabled: Boolean(normalized.enabled && String(normalized.message || "").trim()),
+    message: String(normalized.message || "").trim(),
+    delayMinutes: normalizeMarketingDelay(delayMinutes)
+  };
+}
+
+function normalizeMarketingDelay(value: number): number {
+  if (!Number.isFinite(value)) return defaultCustomerMarketing.delayMinutes;
+  const rounded = Math.max(1, Math.min(60, Math.floor(value)));
+  return rounded === 10 ? 11 : rounded;
 }
 
 function normalizeAlertPhone(phone: string): string {

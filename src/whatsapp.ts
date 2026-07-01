@@ -19,6 +19,7 @@ import { processAttachment } from "./jobProcessor.js";
 import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
+import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
 
 type StatusListener = (state: WhatsAppRuntimeState) => void;
 
@@ -54,6 +55,7 @@ export class WhatsAppService {
   }
 
   async start(): Promise<void> {
+    assertLicenseCanRun();
     if (this.socket) {
       return;
     }
@@ -87,7 +89,7 @@ export class WhatsAppService {
 
       if (update.connection === "close") {
         const reason = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-        const shouldReconnect = !this.intentionalStop && reason !== DisconnectReason.loggedOut;
+        const shouldReconnect = !this.intentionalStop && reason !== DisconnectReason.loggedOut && getLicenseStatus().canRun;
         this.socket = undefined;
         this.setState({
           connected: false,
@@ -141,6 +143,10 @@ export class WhatsAppService {
 
   private async handleMessage(message: proto.IWebMessageInfo): Promise<void> {
     if (!this.socket || !message.message || message.key.fromMe) {
+      return;
+    }
+    if (!getLicenseStatus().canRun) {
+      await this.stop(false);
       return;
     }
 

@@ -8,6 +8,7 @@ import { hasMessage, savePrintLog, setPrintStatus } from "./db.js";
 import { logger } from "./logger.js";
 import { savePrintDuration } from "./printMetrics.js";
 import { sendSystemAlert } from "./alerts.js";
+import { applyLicenseLimits, registerTrialDocument } from "./license.js";
 
 export async function processAttachment(
   attachment: IncomingAttachment,
@@ -25,7 +26,7 @@ export async function registerAttachment(
   attachment: IncomingAttachment,
   getConfig: () => AppConfig
 ): Promise<PrintLogEntry> {
-  const config = getConfig();
+  const config = applyLicenseLimits(getConfig());
   const createdAt = new Date().toISOString();
 
   if (hasMessage(attachment.messageKey)) {
@@ -39,6 +40,13 @@ export async function registerAttachment(
     return writeLog(attachment, config, createdAt, "rejected", validation.reason);
   }
 
+  const trialCheck = registerTrialDocument(attachment.senderPhone);
+  if (!trialCheck.ok) {
+    moveTo(attachment.filePath, appPaths.failedDir);
+    sendSystemAlert("Trial limit reached", trialCheck.reason);
+    return writeLog(attachment, config, createdAt, "rejected", trialCheck.reason);
+  }
+
   const initial = writeLog(attachment, config, createdAt, "received");
 
   return initial;
@@ -48,7 +56,7 @@ export async function printRegisteredAttachment(
   attachment: PrintLogEntry,
   getConfig: () => AppConfig
 ): Promise<PrintLogEntry> {
-  const config = getConfig();
+  const config = applyLicenseLimits(getConfig());
   try {
     const startedAt = Date.now();
     await printFile(attachment, config);

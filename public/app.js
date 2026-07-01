@@ -8,6 +8,8 @@ const state = {
   printers: [],
   printedFiles: [],
   logFiles: [],
+  updateInfo: null,
+  registration: null,
   currentPage: "dashboard",
   currentSettingsTab: "printer",
   currentMessagesTab: "flow",
@@ -223,6 +225,22 @@ function translateDom(root = document.body) {
 }
 
 function getPages() {
+  if (isLocked()) {
+    return [
+      ["license", "key-round", lang() === "he" ? "רישוי ואודות" : "License & About", lang() === "he" ? "המערכת נעולה עד להפעלת רישיון" : "System is locked until a license is activated"]
+    ];
+  }
+
+  if (isTrial()) {
+    return [
+      ["dashboard", "layout-dashboard", t("dashboard"), t("dashboardSub")],
+      ["settings", "settings", t("settings"), lang() === "he" ? "הגדרת מדפסת אחת, התראות ושפה" : "One printer, alerts and language"],
+      ["logs", "list-checks", t("logs"), t("logsSub")],
+      ["license", "key-round", lang() === "he" ? "רישוי ואודות" : "License & About", lang() === "he" ? "Trial, בחירת מסלול והפעלת רישיון" : "Trial, plan request and activation"],
+      ["diagnostics", "file-terminal", t("diagnostics"), t("diagnosticsSub")]
+    ];
+  }
+
   return [
     ["dashboard", "layout-dashboard", t("dashboard"), t("dashboardSub")],
     ["settings", "settings", t("settings"), t("settingsSub")],
@@ -230,7 +248,7 @@ function getPages() {
     ["logs", "list-checks", t("logs"), t("logsSub")],
     ["files", "folder-open", t("files"), t("filesSub")],
     ["pricing", "calculator", t("pricing"), t("pricingSub")],
-    ["license", "key-round", lang() === "he" ? "רישוי" : "License", lang() === "he" ? "Trial, קוד מחשב והפעלת רישיון" : "Trial, machine code and activation"],
+    ["license", "key-round", lang() === "he" ? "רישוי ואודות" : "License & About", lang() === "he" ? "Trial, קוד מחשב, מסלול ואודות MY-PC" : "Trial, machine code, plan and MY-PC details"],
     ["diagnostics", "file-terminal", t("diagnostics"), t("diagnosticsSub")],
     ["advanced", "sliders-horizontal", t("advanced"), t("advancedSub")],
     ["about", "info", t("about"), t("aboutSub")]
@@ -238,15 +256,30 @@ function getPages() {
 }
 
 function getSettingsTabs() {
+  if (isTrial()) {
+    return [
+      ["printer", "printer", lang() === "he" ? "מדפסת Trial" : "Trial Printer"],
+      ["alerts", "bell-ring", lang() === "he" ? "התראות בסיסיות" : "Basic Alerts"],
+      ["language", "languages", lang() === "he" ? "שפה" : "Language"]
+    ];
+  }
+
   return [
-    ["printer", "printer", lang() === "he" ? "מדפסות" : lang() === "ru" ? "Принтеры" : "Printers"],
-    ["messages", "message-square-text", lang() === "he" ? "הודעות" : lang() === "ru" ? "Сообщения" : "Messages"],
-    ["files", "file-type", lang() === "he" ? "סוגי קבצים" : lang() === "ru" ? "Типы файлов" : "File Types"],
-    ["alerts", "bell-ring", lang() === "he" ? "התראות" : lang() === "ru" ? "Уведомления" : "Alerts"],
-    ["email", "mail", lang() === "he" ? "דואר" : lang() === "ru" ? "Email" : "Email"],
-    ["language", "languages", lang() === "he" ? "שפה ומיתוג" : lang() === "ru" ? "Язык и бренд" : "Language & Brand"],
-    ["advanced", "wrench", lang() === "he" ? "מתקדם" : lang() === "ru" ? "Расширенные" : "Advanced"]
+    ["printer", "printer", lang() === "he" ? "מדפסות" : "Printers"],
+    ["messages", "message-square-text", lang() === "he" ? "הודעות" : "Messages"],
+    ["files", "file-type", lang() === "he" ? "סוגי קבצים" : "File Types"],
+    ["alerts", "bell-ring", lang() === "he" ? "התראות" : "Alerts"],
+    ["language", "languages", lang() === "he" ? "שפה" : "Language"],
+    ["advanced", "wrench", lang() === "he" ? "מתקדם" : "Advanced"]
   ];
+}
+
+function isTrial() {
+  return state.license?.mode === "trial" || state.license?.mode === "invalid";
+}
+
+function isLocked() {
+  return state.license && !state.license.canRun;
 }
 
 async function api(path, options) {
@@ -288,6 +321,7 @@ async function init() {
   bindLogin();
   renderNav();
   bindHeaderActions();
+  bindFooterActions();
 
   try {
     const [auth, config] = await Promise.all([
@@ -377,6 +411,15 @@ function renderNav() {
 }
 
 function bindHeaderActions() {
+  document.querySelectorAll(".brand-logo").forEach((logo) => {
+    logo.addEventListener("click", () => {
+      if (!isLocked()) {
+        state.currentPage = "dashboard";
+        render();
+      }
+    });
+  });
+
   $("#languageSelect").addEventListener("change", async (event) => {
     state.config.language = event.target.value;
     await saveConfig(false);
@@ -388,6 +431,30 @@ function bindHeaderActions() {
   $("#startBtn").addEventListener("click", async () => action("מחבר WhatsApp...", "/api/whatsapp/start", "בקשת חיבור נשלחה."));
   $("#stopBtn").addEventListener("click", async () => action("מנתק WhatsApp...", "/api/whatsapp/stop", "WhatsApp נותק."));
   $("#resetBtn").addEventListener("click", async () => action("יוצר QR חדש...", "/api/whatsapp/reset", "נוצר QR חדש."));
+}
+
+function bindFooterActions() {
+  document.querySelector("[data-footer-action='docs']")?.addEventListener("click", () => {
+    if (isLocked()) {
+      state.currentPage = "license";
+    } else {
+      state.currentPage = "diagnostics";
+    }
+    showDocumentation();
+  });
+  document.querySelector("[data-footer-action='website']")?.addEventListener("click", () => {
+    window.open("https://my-pc.co.il", "_blank", "noopener,noreferrer");
+  });
+  document.querySelector("[data-footer-action='whatsapp']")?.addEventListener("click", () => {
+    window.open("https://wa.me/972522250223?text=%D7%A9%D7%9C%D7%95%D7%9D%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A1%D7%99%D7%95%D7%A2%20%D7%91%D7%9E%D7%A2%D7%A8%D7%9B%D7%AA%20%D7%94%D7%93%D7%A4%D7%A1%D7%AA%20WhatsApp", "_blank", "noopener,noreferrer");
+  });
+}
+
+function showDocumentation() {
+  $("#pageHost").innerHTML = renderDocumentation();
+  $("#pageTitle").textContent = "תיעוד ועזרה";
+  $("#pageSubtitle").textContent = "מדריך משתמש מלא למערכת";
+  renderIcons();
 }
 
 if ("serviceWorker" in navigator) {
@@ -410,11 +477,9 @@ function applyStaticTranslations() {
 }
 
 function renderFooter() {
-  const branding = state.config?.branding || {};
-  const footerText = branding.footerText || "כל הזכויות שמורות למחשב שלי - מחברים אותך לעולם הטכנולוגי | מחלקת פיתוח";
-  const footerUrl = branding.footerUrl || "https://my-pc.co.il";
-  const footerUrlLabel = branding.footerUrlLabel || "my-pc.co.il";
-  $(".footer-center p").textContent = footerText;
+  const footerUrl = "https://my-pc.co.il";
+  const footerUrlLabel = "my-pc.co.il";
+  $(".footer-center p").textContent = "כל הזכויות שמורות ל-MY-PC - המחשב שלי | מחלקת פיתוח";
   const link = $(".footer-center a");
   link.textContent = footerUrlLabel;
   link.href = footerUrl;
@@ -435,15 +500,18 @@ async function action(loadingText, path, successText) {
 }
 
 async function loadAll() {
-  const [status, jobs, printers, printedFiles, logFiles] = await Promise.all([
+  const [status, jobs, printers, printedFiles, logFiles, updateInfo] = await Promise.all([
     api("/api/status"),
     api("/api/jobs"),
     api("/api/printers/details").catch(() => []),
     api("/api/printed/files").catch(() => []),
-    api("/api/log-files").catch(() => [])
+    api("/api/log-files").catch(() => []),
+    api("/api/updates/check").catch(() => null)
   ]);
   state.status = status;
   state.license = status.license;
+  state.registration = status.registration || null;
+  state.updateInfo = updateInfo;
   state.config = status.config;
   state.jobs = jobs;
   state.printers = printers;
@@ -458,6 +526,7 @@ function render() {
   applyStaticTranslations();
   const pageList = getPages();
   const page = pageList.find(([id]) => id === state.currentPage) || pageList[0];
+  state.currentPage = page[0];
   $("#pageTitle").textContent = page[2];
   $("#pageSubtitle").textContent = page[3];
   renderNav();
@@ -496,6 +565,15 @@ function bindPage() {
       notify("success", "הנתונים רועננו.");
     });
   });
+  document.querySelectorAll("[data-page-jump]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.currentPage = button.dataset.pageJump;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-run-update]").forEach((button) => {
+    button.addEventListener("click", runUpdate);
+  });
 }
 
 function renderDashboard() {
@@ -504,6 +582,8 @@ function renderDashboard() {
   const printer = state.printers.find((item) => item.name === state.config.printerName);
   return `
     <section class="dashboard-grid fade-in">
+      ${renderTrialNotice()}
+      ${renderUpdateNotice()}
       <article class="panel hero-panel">
         <div>
           <p class="eyebrow">MY-PC WhatsApp Print Server</p>
@@ -536,6 +616,40 @@ function renderDashboard() {
         <div class="qr-box">${whatsapp.qrDataUrl ? `<img src="${whatsapp.qrDataUrl}" alt="QR" />` : `<i data-lucide="${whatsapp.connected ? "check-circle-2" : "qr-code"}"></i><span>${whatsapp.connected ? "מחובר" : "אין QR פעיל"}</span>`}</div>
       </article>
     </section>
+  `;
+}
+
+function renderTrialNotice() {
+  const license = state.license || {};
+  if (license.mode !== "trial" && license.mode !== "invalid") return "";
+  const usage = license.trialUsage || {};
+  const limits = license.trialLimits || {};
+  return `
+    <article class="panel wide trial-banner">
+      <div>
+        <strong>מערכת Trial פעילה - נותרו ${license.trialDaysLeft || 0} ימים</strong>
+        <span>מותר: מדפסת אחת, שחור לבן, PDF/JPG/JPEG/PNG בלבד, עד ${limits.documentsPerDay || 5} מסמכים ביום ועד ${limits.sendersPerDay || 5} שולחים ביום.</span>
+      </div>
+      <div class="trial-counters">
+        <span>${usage.documentCount || 0}/${limits.documentsPerDay || 5} מסמכים היום</span>
+        <span>${usage.senderCount || 0}/${limits.sendersPerDay || 5} שולחים היום</span>
+      </div>
+      <button class="btn btn-primary" data-page-jump="license"><i data-lucide="badge-check"></i><span>בחר מסלול ובקש רישיון</span></button>
+    </article>
+  `;
+}
+
+function renderUpdateNotice() {
+  const update = state.updateInfo;
+  if (!update?.available) return "";
+  return `
+    <article class="panel wide update-banner">
+      <div>
+        <strong>יש עדכון חדש, נא לעדכן</strong>
+        <span>גרסה נוכחית: ${escapeHtml(update.current)} | גרסה ב-GitHub: ${escapeHtml(update.latest)}</span>
+      </div>
+      <button class="btn btn-primary" data-run-update><i data-lucide="download-cloud"></i><span>עדכן עכשיו</span></button>
+    </article>
   `;
 }
 
@@ -575,11 +689,12 @@ function renderSettingsTab() {
 
   if (tab === "printer") return `
     ${sectionTitle("printer", "הגדרת מדפסות", "כמה מדפסות יש בעסק ומה התפקיד של כל אחת")}
+    ${isTrial() ? `<div class="license-inline-note"><strong>Trial פעיל:</strong> ניתן להגדיר מדפסת אחת בלבד, שחור לבן בלבד.</div>` : ""}
     <div class="form-grid">
-      ${selectField("printerProfileCount", "כמה מדפסות יש לי?", printerCountOptions((config.printerProfiles || []).length || 1))}
+      ${selectField("printerProfileCount", "כמה מדפסות יש לי?", isTrial() ? options([[1, "מדפסת אחת (Trial)"]], 1) : printerCountOptions((config.printerProfiles || []).length || 1))}
       ${selectField("printerName", "מדפסת ראשית במערכת", printerOptions(config.printerName))}
-      ${numberField("copies", "עותקים", config.copies, 1)}
-      ${checkField("roleAskColorPreference", "אם יש מדפסת צבעונית, שאל לקוח צבעוני או שחור־לבן", roles.askColorPreference)}
+      ${isTrial() ? "" : numberField("copies", "עותקים", config.copies, 1)}
+      ${isTrial() ? "" : checkField("roleAskColorPreference", "אם יש מדפסת צבעונית, שאל לקוח צבעוני או שחור־לבן", roles.askColorPreference)}
       ${checkField("autoPrint", "הדפסה אוטומטית", config.autoPrint)}
       ${checkField("deleteAfterPrint", "מחיקה לאחר הדפסה", config.deleteAfterPrint)}
     </div>
@@ -654,13 +769,10 @@ function renderSettingsTab() {
   `;
 
   if (tab === "language") return `
-    ${sectionTitle("languages", "שפה ומיתוג", "עברית, אנגלית, רוסית והחלק התחתון של המערכת")}
+    ${sectionTitle("languages", "שפה", "בחירת שפת הממשק ללקוח")}
     <div class="form-grid">
-      ${selectField("language", "שפת מערכת", options([["he","עברית"],["en","English"],["ru","Русский"]], config.language))}
+      ${selectField("language", "שפת מערכת", options([["he","עברית"],["en","English"]], config.language))}
       ${inputField("adminPassword", "שינוי סיסמת מנהל", config.adminPassword, "השאר ריק כדי להסיר סיסמה", "password")}
-      ${inputField("footerText", "טקסט Footer", config.branding?.footerText || "")}
-      ${inputField("footerUrlLabel", "טקסט קישור Footer", config.branding?.footerUrlLabel || "")}
-      ${inputField("footerUrl", "כתובת קישור Footer", config.branding?.footerUrl || "")}
     </div>
   `;
 
@@ -712,7 +824,13 @@ function renderMessageFields(messages) {
   }
 
   if (state.currentMessagesTab === "marketing") {
-    return textareaField("messagePromo", "הודעה פרסומית", messages.promo);
+    const marketing = state.config.customerMarketing || {};
+    return `
+      <label class="field full"><span>הודעת MY-PC קבועה</span><textarea rows="5" disabled>${escapeHtml(messages.promo || "")}</textarea></label>
+      ${checkField("customerMarketingEnabled", "אפשר הודעה שיווקית נוספת של העסק", marketing.enabled)}
+      ${selectField("customerMarketingDelay", "מועד שליחה", options([[1, "אחרי דקה"], [5, "אחרי 5 דקות"], [30, "אחרי 30 דקות"], [60, "אחרי שעה"]], marketing.delayMinutes || 5))}
+      ${textareaField("customerMarketingMessage", "הודעה שיווקית של העסק", marketing.message || "")}
+    `;
   }
 
   return [
@@ -873,6 +991,9 @@ function bindSettings() {
   });
 
   $("#stopPrintingBtn")?.addEventListener("click", stopPrinting);
+  document.querySelectorAll("[data-office-test]").forEach((button) => {
+    button.addEventListener("click", () => runOfficeTest(button.dataset.officeTest));
+  });
 }
 
 function readSettingsForm() {
@@ -948,6 +1069,12 @@ function readSettingsForm() {
     reminder: get("messageReminder") ?? config.customerMessages.reminder,
     failed: get("messageFailed") ?? config.customerMessages.failed,
     promo: get("messagePromo") ?? config.customerMessages.promo
+  };
+
+  config.customerMarketing = {
+    enabled: form.elements.customerMarketingEnabled ? checked("customerMarketingEnabled") : Boolean(config.customerMarketing?.enabled),
+    message: get("customerMarketingMessage") ?? config.customerMarketing?.message ?? "",
+    delayMinutes: Number(get("customerMarketingDelay") ?? config.customerMarketing?.delayMinutes ?? 5)
   };
 
   config.email = {
@@ -1124,6 +1251,7 @@ function bindPricing() {
 
 function renderLicense() {
   const license = state.license || {};
+  const registration = state.registration || {};
   const statusText = license.mode === "licensed"
     ? "רישיון פעיל"
     : license.mode === "trial"
@@ -1132,16 +1260,7 @@ function renderLicense() {
         ? "תקופת הניסיון הסתיימה"
         : "הרישיון אינו תקין";
   const statusType = license.canRun ? "success" : "error";
-  const requestText = [
-    "בקשת רישיון MY-PC WhatsApp Print Server",
-    "",
-    "שם לקוח: ",
-    "טלפון: ",
-    "אימייל: ",
-    `קוד מחשב: ${license.machineCode || ""}`,
-    `Machine ID: ${license.machineId || ""}`,
-    `מצב: ${license.mode || ""}`
-  ].join("\n");
+  const requestText = buildLicenseRequestText(registration, license);
 
   return `
     <section class="two-column fade-in">
@@ -1161,16 +1280,24 @@ function renderLicense() {
         </div>
       </article>
       <article class="panel">
-        ${sectionTitle("copy", "פרטים לשליחה ל-MY-PC", "הלקוח מעתיק ושולח לך את הפרטים האלה")}
+        ${sectionTitle("clipboard-list", "רישום לקוח ובחירת מסלול", "מלאו פרטים ושלחו בקשת רישוי ל-MY-PC")}
         <div class="form-grid">
-          ${inputField("licenseCustomerName", "שם לקוח / עסק", "")}
-          ${inputField("licenseCustomerPhone", "טלפון", "")}
-          ${inputField("licenseCustomerEmail", "אימייל", "")}
+          ${inputField("licenseBusinessName", "שם העסק", registration.businessName || "")}
+          ${inputField("licenseContactName", "שם איש קשר", registration.contactName || "")}
+          ${inputField("licenseCustomerPhone", "טלפון לקבלת התראות", registration.phone || "", "0522250223")}
+          ${inputField("licenseCustomerEmail", "אימייל", registration.email || "", "name@example.com")}
+          ${inputField("licenseBusinessAddress", "כתובת העסק", registration.address || "")}
+          ${selectField("licensePlan", "מסלול", options([
+            ["monthly", "חודשי - 100 ש״ח לפני מע״מ"],
+            ["sixMonths", "חצי שנה - 500 ש״ח לפני מע״מ"],
+            ["yearly", "שנתי - 1000 ש״ח לפני מע״מ"]
+          ], registration.plan || ""))}
         </div>
         <label class="field full"><span>בקשת רישיון</span><textarea id="licenseRequestText" rows="8">${escapeHtml(requestText)}</textarea></label>
         <div class="inline-actions">
           <button id="copyMachineCodeBtn" type="button" class="btn btn-muted"><i data-lucide="copy"></i><span>העתק קוד מחשב</span></button>
           <button id="copyLicenseRequestBtn" type="button" class="btn btn-primary"><i data-lucide="clipboard"></i><span>העתק בקשת רישיון</span></button>
+          <button id="sendLicenseWhatsappBtn" type="button" class="btn btn-success"><i data-lucide="message-circle"></i><span>שלח ל-MY-PC ב-WhatsApp</span></button>
         </div>
       </article>
       <article class="panel wide">
@@ -1180,6 +1307,18 @@ function renderLicense() {
           <button id="activateLicenseBtn" type="button" class="btn btn-success"><i data-lucide="shield-check"></i><span>הפעל רישיון</span></button>
         </div>
       </article>
+      <article class="panel wide about-hero">
+        <img class="brand-logo about-logo" src="/assets/my-pc-logo-white.png" alt="MY-PC" />
+        <h2>המחשב שלי - מחברים אותך לעולם הטכנולוגי</h2>
+        <p>שרת הדפסה אוטומטי דרך WhatsApp, פותח ומתוחזק על ידי MY-PC.</p>
+        <div class="about-grid">
+          <span>גרסת מערכת</span><strong>${escapeHtml(state.status?.version || "1.0.2")}</strong>
+          <span>טלפון</span><strong>052-225-0223</strong>
+          <span>אימייל</span><a href="mailto:office@my-pc.co.il">office@my-pc.co.il</a>
+          <span>אתר</span><a href="https://my-pc.co.il" target="_blank" rel="noreferrer">my-pc.co.il</a>
+        </div>
+        <p class="legal-note">כל הזכויות שמורות ל-MY-PC. המערכת עושה שימוש בכלים בקוד פתוח, אך האפיון, האינטגרציה, החיבור והאריזה למערכת אחת הם יצירה של MY-PC.</p>
+      </article>
     </section>
   `;
 }
@@ -1187,23 +1326,20 @@ function renderLicense() {
 function bindLicense() {
   const refreshRequestText = () => {
     const license = state.license || {};
-    const name = document.querySelector("[name='licenseCustomerName']")?.value || "";
+    const businessName = document.querySelector("[name='licenseBusinessName']")?.value || "";
+    const contactName = document.querySelector("[name='licenseContactName']")?.value || "";
     const phone = document.querySelector("[name='licenseCustomerPhone']")?.value || "";
     const email = document.querySelector("[name='licenseCustomerEmail']")?.value || "";
-    $("#licenseRequestText").value = [
-      "בקשת רישיון MY-PC WhatsApp Print Server",
-      "",
-      `שם לקוח: ${name}`,
-      `טלפון: ${phone}`,
-      `אימייל: ${email}`,
-      `קוד מחשב: ${license.machineCode || ""}`,
-      `Machine ID: ${license.machineId || ""}`,
-      `מצב: ${license.mode || ""}`
-    ].join("\n");
+    const address = document.querySelector("[name='licenseBusinessAddress']")?.value || "";
+    const plan = document.querySelector("[name='licensePlan']")?.value || "";
+    const registration = { businessName, contactName, phone, email, address, plan };
+    state.registration = registration;
+    $("#licenseRequestText").value = buildLicenseRequestText(registration, license);
   };
 
-  ["licenseCustomerName", "licenseCustomerPhone", "licenseCustomerEmail"].forEach((name) => {
+  ["licenseBusinessName", "licenseContactName", "licenseCustomerPhone", "licenseCustomerEmail", "licenseBusinessAddress", "licensePlan"].forEach((name) => {
     document.querySelector(`[name='${name}']`)?.addEventListener("input", refreshRequestText);
+    document.querySelector(`[name='${name}']`)?.addEventListener("change", refreshRequestText);
   });
 
   $("#copyMachineCodeBtn")?.addEventListener("click", async () => {
@@ -1212,8 +1348,14 @@ function bindLicense() {
   });
 
   $("#copyLicenseRequestBtn")?.addEventListener("click", async () => {
+    await saveRegistrationFromLicenseForm();
     await navigator.clipboard.writeText($("#licenseRequestText").value);
     notify("success", "בקשת הרישיון הועתקה.");
+  });
+
+  $("#sendLicenseWhatsappBtn")?.addEventListener("click", async () => {
+    await saveRegistrationFromLicenseForm();
+    window.open(`https://wa.me/972522250223?text=${encodeURIComponent($("#licenseRequestText").value)}`, "_blank", "noopener,noreferrer");
   });
 
   $("#activateLicenseBtn")?.addEventListener("click", async () => {
@@ -1230,6 +1372,48 @@ function bindLicense() {
       setLoading(false);
     }
   });
+}
+
+async function saveRegistrationFromLicenseForm() {
+  const registration = {
+    businessName: document.querySelector("[name='licenseBusinessName']")?.value || "",
+    contactName: document.querySelector("[name='licenseContactName']")?.value || "",
+    phone: document.querySelector("[name='licenseCustomerPhone']")?.value || "",
+    email: document.querySelector("[name='licenseCustomerEmail']")?.value || "",
+    address: document.querySelector("[name='licenseBusinessAddress']")?.value || "",
+    plan: document.querySelector("[name='licensePlan']")?.value || ""
+  };
+  state.registration = await api("/api/license/registration", postJson(registration));
+  if (state.config) {
+    state.config.alertsPhone = state.registration.phone || state.config.alertsPhone;
+  }
+}
+
+function buildLicenseRequestText(registration, license) {
+  return [
+    "לקוח חדש במערכת הדפסת WhatsApp מבקש רישוי",
+    "",
+    `שם העסק: ${registration?.businessName || ""}`,
+    `איש קשר: ${registration?.contactName || ""}`,
+    `טלפון: ${registration?.phone || ""}`,
+    `אימייל: ${registration?.email || ""}`,
+    `כתובת העסק: ${registration?.address || ""}`,
+    `מסלול מבוקש: ${planLabel(registration?.plan || "")}`,
+    "",
+    `קוד מחשב: ${license?.machineCode || ""}`,
+    `Machine ID: ${license?.machineId || ""}`,
+    `מצב רישיון: ${license?.mode || ""}`,
+    `ימים שנותרו ב-Trial: ${license?.trialDaysLeft ?? ""}`,
+    "",
+    "נא להפיק קובץ רישיון חתום למחשב זה."
+  ].join("\n");
+}
+
+function planLabel(plan) {
+  if (plan === "monthly") return "חודשי - 100 ש״ח לפני מע״מ";
+  if (plan === "sixMonths") return "חצי שנה - 500 ש״ח לפני מע״מ";
+  if (plan === "yearly") return "שנתי - 1000 ש״ח לפני מע״מ";
+  return "לא נבחר";
 }
 
 function renderDiagnostics() {
@@ -1261,8 +1445,10 @@ function renderAdvanced() {
     <section class="two-column fade-in">
       <article class="panel">
         ${sectionTitle("test-tube-2", "בדיקות Office", "בדיקות עיצוב לפני שימוש")}
-        <p>כאן ירוכזו בדיקות Excel, PowerPoint, PDF ותצוגת פלט. בשלב הבא נוסיף בחירת קובץ והרצת Preview.</p>
+        <p>שליחת דף בדיקה למדפסת שנבחרה לפי הגדרות Office.</p>
         <div class="inline-actions">
+          <button type="button" class="btn btn-muted" data-office-test="excel"><i data-lucide="sheet"></i><span>בדיקת Excel</span></button>
+          <button type="button" class="btn btn-muted" data-office-test="powerpoint"><i data-lucide="presentation"></i><span>בדיקת PowerPoint</span></button>
           <button id="stopPrintingBtn" class="btn btn-danger-outline"><i data-lucide="octagon-x"></i><span>עצור הדפסה מיד</span></button>
           <button data-refresh class="btn btn-muted"><i data-lucide="refresh-cw"></i><span>רענן מערכת</span></button>
         </div>
@@ -1289,6 +1475,9 @@ function renderAdvanced() {
 
 function bindAdvanced() {
   $("#stopPrintingBtn")?.addEventListener("click", stopPrinting);
+  document.querySelectorAll("[data-office-test]").forEach((button) => {
+    button.addEventListener("click", () => runOfficeTest(button.dataset.officeTest));
+  });
   $("#enableStartupBtn")?.addEventListener("click", async () => action("מפעיל עלייה עם Windows...", "/api/startup/enable", "הפעלה אוטומטית הופעלה."));
   $("#disableStartupBtn")?.addEventListener("click", async () => action("מבטל עלייה עם Windows...", "/api/startup/disable", "הפעלה אוטומטית בוטלה."));
   $("#checkUpdatesBtn")?.addEventListener("click", checkUpdates);
@@ -1312,15 +1501,17 @@ async function checkUpdates() {
 }
 
 async function runUpdate() {
-  setLoading(true, "מתקין עדכון...");
+  setLoading(true, "מתקין עדכון... המערכת תתרענן אוטומטית בעוד כשתי דקות. עדכונים נוספים בדרך.");
   try {
     const result = await api("/api/updates/run", { method: "POST" });
     notify("success", result.message || "העדכון הסתיים.");
     $("#updateStatusText").textContent = result.message || "העדכון הסתיים.";
+    setTimeout(() => window.location.reload(), 120000);
   } catch (error) {
     notify("error", error.message || "העדכון נכשל.");
-  } finally {
     setLoading(false);
+  } finally {
+    // Keep the loader visible while the updater replaces files and restarts the server.
   }
 }
 
@@ -1342,6 +1533,40 @@ function renderAbout() {
   `;
 }
 
+function renderDocumentation() {
+  return `
+    <section class="panel fade-in docs-page">
+      ${sectionTitle("book-open-check", "תיעוד מערכת", "איך עובדים עם MY-PC WhatsApp Print Server")}
+      <div class="docs-grid">
+        <article>
+          <h3>1. חיבור WhatsApp</h3>
+          <p>לחץ על “חבר WhatsApp”, סרוק QR מתוך WhatsApp בטלפון, והמתן לסטטוס מחובר.</p>
+        </article>
+        <article>
+          <h3>2. בחירת מדפסת</h3>
+          <p>בהגדרות בוחרים את מדפסת Windows הפעילה. ב-Trial ניתן לבחור מדפסת אחת בלבד ובשחור לבן.</p>
+        </article>
+        <article>
+          <h3>3. קבלת קבצים</h3>
+          <p>לקוח שולח קובץ, המערכת שומרת אותו, שואלת אם סיים לשלוח קבצים, ומכניסה לתור רק אחרי אישור.</p>
+        </article>
+        <article>
+          <h3>4. ביטול הדפסה</h3>
+          <p>לקוח יכול לכתוב “ביטול הדפסה”. מתוך הממשק ניתן ללחוץ “עצור הדפסה מיד” כדי לבטל עבודות בתור Windows.</p>
+        </article>
+        <article>
+          <h3>5. רישוי</h3>
+          <p>ה-Trial נמשך 14 יום. לאחר מכן WhatsApp מתנתק ולא ניתן להדפיס או לחבר WhatsApp עד הכנסת רישיון תקף.</p>
+        </article>
+        <article>
+          <h3>6. עדכונים</h3>
+          <p>כאשר מופיע עדכון חדש בדשבורד, לחץ “עדכן עכשיו”. המערכת תוריד מ-GitHub, תבנה ותיטען מחדש.</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 async function stopPrinting() {
   setLoading(true, "עוצר עבודות בתור...");
   try {
@@ -1349,6 +1574,19 @@ async function stopPrinting() {
     notify("success", `נעצרו ${result.stopped || 0} עבודות.`);
   } catch (error) {
     notify("error", error.message || "עצירת ההדפסה נכשלה.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function runOfficeTest(type) {
+  const normalized = type === "powerpoint" ? "powerpoint" : "excel";
+  setLoading(true, normalized === "excel" ? "שולח בדיקת Excel..." : "שולח בדיקת PowerPoint...");
+  try {
+    const result = await api(`/api/office-test/${normalized}`, { method: "POST" });
+    notify("success", result.message || "בדיקת Office נשלחה למדפסת.");
+  } catch (error) {
+    notify("error", error.message || "בדיקת Office נכשלה.");
   } finally {
     setLoading(false);
   }

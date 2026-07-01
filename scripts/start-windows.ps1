@@ -56,6 +56,30 @@ function Get-NpmCmd() {
   throw "npm was not found. Run scripts\install-windows.ps1 first."
 }
 
+function Initialize-SumatraPdf($ProjectRoot) {
+  $SumatraDir = Join-Path $ProjectRoot "tools\SumatraPDF"
+  $SumatraExe = Join-Path $SumatraDir "SumatraPDF.exe"
+  if (Test-Path $SumatraExe) {
+    return
+  }
+
+  Write-Host "SumatraPDF was not found. Downloading portable SumatraPDF..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  New-Item -ItemType Directory -Force -Path $SumatraDir | Out-Null
+  $SumatraZip = Join-Path $env:TEMP "SumatraPDF-3.6.1-64.zip"
+  $ExtractRoot = Join-Path $env:TEMP "my-pc-sumatrapdf"
+  if (Test-Path $ExtractRoot) {
+    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+  }
+  Invoke-WebRequest -Uri "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip" -OutFile $SumatraZip
+  Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "SumatraPDF.exe" | Select-Object -First 1
+  if (-not $DownloadedExe) {
+    throw "Could not extract SumatraPDF.exe from the portable package."
+  }
+  Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
+}
+
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
 Enable-PortableNodePath $ProjectRoot $NodeExe
@@ -78,18 +102,23 @@ foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
+Initialize-SumatraPdf $ProjectRoot
+
 if (-not (Test-Path "config\settings.json") -and (Test-Path "config\settings.example.json")) {
   Copy-Item "config\settings.example.json" "config\settings.json"
 }
 
-if ($OpenBrowser) {
-  Start-Process "http://localhost:3010"
-}
-
 if ($Hidden) {
   Start-Process -FilePath $NodeExe -ArgumentList @("dist/main.js") -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+  if ($OpenBrowser) {
+    Start-Sleep -Seconds 3
+    Start-Process "http://localhost:3010"
+  }
   Write-Host "MY-PC WhatsApp Print Server started in background: http://localhost:3010"
 } else {
   Write-Host "MY-PC WhatsApp Print Server starting: http://localhost:3010"
+  if ($OpenBrowser) {
+    Start-Process "http://localhost:3010"
+  }
   & $NodeExe dist/main.js
 }

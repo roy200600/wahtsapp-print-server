@@ -24,10 +24,15 @@
   "deleteAfterPrint": false,
   "sendWhatsappReply": false,
   "allowGroupPrinting": false,
+  "customerMarketing": {
+    "enabled": false,
+    "message": "",
+    "delayMinutes": 5
+  },
   "copies": 1,
   "duplex": false,
   "color": true,
-  "sumatraPdfPath": "",
+  "sumatraPdfPath": "tools\\SumatraPDF\\SumatraPDF.exe",
   "pdfPrintProfile": {
     "colorMode": "color",
     "duplex": "simplex",

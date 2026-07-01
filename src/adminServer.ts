@@ -15,7 +15,17 @@ import {
 } from "./maintenance.js";
 import { stopPrintQueue } from "./printQueue.js";
 import { sendTestAlert } from "./alerts.js";
-import { activateLicense, assertLicenseCanRun, getLicenseStatus } from "./license.js";
+import {
+  activateLicense,
+  applyLicenseLimits,
+  assertLicenseCanRun,
+  getLicenseStatus,
+  getRegistration,
+  mergeConfigForLicense,
+  saveRegistration,
+  verifySuperAdminPassword
+} from "./license.js";
+import { runOfficePrintTest } from "./officeTests.js";
 import {
   checkWindowsPrinterCompatibility,
   listWindowsPrinterDetails,
@@ -36,10 +46,12 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   }));
 
   app.get("/api/status", (_req, res) => {
+    const license = getLicenseStatus();
     res.json({
       whatsapp: whatsapp.getState(),
-      config: sanitizeConfig(loadConfig()),
-      license: getLicenseStatus(),
+      config: sanitizeConfig(applyLicenseLimits(loadConfig(), license)),
+      license,
+      registration: getRegistration(),
       version: getCurrentVersion()
     });
   });
@@ -54,6 +66,22 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  app.get("/api/license/registration", (_req, res) => {
+    res.json(getRegistration());
+  });
+
+  app.post("/api/license/registration", (req, res) => {
+    res.json(saveRegistration(req.body ?? {}));
+  });
+
+  app.post("/api/super-admin/login", (req, res) => {
+    if (verifySuperAdminPassword(String(req.body?.password ?? ""))) {
+      res.json({ ok: true });
+      return;
+    }
+    res.status(401).json({ error: "Invalid super admin password" });
   });
 
   app.get("/api/auth/status", (_req, res) => {
@@ -89,22 +117,24 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   });
 
   app.get("/api/config", (_req, res) => {
-    res.json(sanitizeConfig(loadConfig()));
+    const license = getLicenseStatus();
+    res.json(sanitizeConfig(applyLicenseLimits(loadConfig(), license)));
   });
 
   app.post("/api/config", (req, res) => {
     const existing = loadConfig();
     const incoming = req.body as AppConfig;
-    const saved = saveConfig({
+    const merged = mergeConfigForLicense(existing, {
       ...incoming,
       adminPassword: incoming.adminPassword ? incoming.adminPassword : existing.adminPassword,
       email: {
         ...incoming.email,
         appPassword: incoming.email?.appPassword ? incoming.email.appPassword : existing.email.appPassword
       }
-    });
+    }, getLicenseStatus());
+    const saved = saveConfig(merged);
     setRuntimeConfig(saved);
-    res.json(sanitizeConfig(saved));
+    res.json(sanitizeConfig(applyLicenseLimits(saved)));
   });
 
   app.get("/api/jobs", (_req, res) => {
@@ -112,6 +142,10 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   });
 
   app.get("/api/printed/files", (_req, res) => {
+    if (getLicenseStatus().mode !== "licensed") {
+      res.json([]);
+      return;
+    }
     res.json(listFiles(appPaths.printedDir));
   });
 
@@ -160,6 +194,10 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
 
   app.post("/api/startup/enable", async (_req, res) => {
     try {
+      if (getLicenseStatus().mode !== "licensed") {
+        res.status(403).json({ error: "Startup with Windows is available only with an active license." });
+        return;
+      }
       res.json(await enableStartup());
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -187,7 +225,21 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   });
 
   app.post("/api/printed/cleanup", (_req, res) => {
+    if (getLicenseStatus().mode !== "licensed") {
+      res.status(403).json({ error: "Printed files cleanup is available only with an active license." });
+      return;
+    }
     res.json(cleanupPrintedFiles());
+  });
+
+  app.post("/api/office-test/:type", async (req, res) => {
+    try {
+      assertLicenseCanRun();
+      const type = req.params.type === "powerpoint" ? "powerpoint" : "excel";
+      res.json(await runOfficePrintTest(type, applyLicenseLimits(loadConfig())));
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.post("/api/alerts/test", async (_req, res) => {

@@ -45,6 +45,28 @@ function Get-NpmCmd() {
   throw "npm was not found. Run scripts\install-windows.ps1 first."
 }
 
+function Initialize-SumatraPdf($ProjectRoot) {
+  $SumatraDir = Join-Path $ProjectRoot "tools\SumatraPDF"
+  $SumatraExe = Join-Path $SumatraDir "SumatraPDF.exe"
+  if (Test-Path $SumatraExe) { return }
+
+  Write-Host "SumatraPDF was not found. Downloading portable SumatraPDF..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  New-Item -ItemType Directory -Force -Path $SumatraDir | Out-Null
+  $SumatraZip = Join-Path $env:TEMP "SumatraPDF-3.6.1-64.zip"
+  $ExtractRoot = Join-Path $env:TEMP "my-pc-sumatrapdf"
+  if (Test-Path $ExtractRoot) {
+    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+  }
+  Invoke-WebRequest -Uri "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip" -OutFile $SumatraZip
+  Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "SumatraPDF.exe" | Select-Object -First 1
+  if (-not $DownloadedExe) {
+    throw "Could not extract SumatraPDF.exe from the portable package."
+  }
+  Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
+}
+
 Write-Host "Stopping running server..."
 Get-CimInstance Win32_Process |
   Where-Object {
@@ -93,6 +115,7 @@ Set-Location -LiteralPath $ProjectRoot
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
 Enable-PortableNodePath $ProjectRoot $NodeExe
+Initialize-SumatraPdf $ProjectRoot
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {

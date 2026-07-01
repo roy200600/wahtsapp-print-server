@@ -31,6 +31,15 @@ if (licenseStatus.canRun) {
 }
 
 setInterval(() => {
+  const status = getLicenseStatus();
+  if (!status.canRun && whatsapp.getState().connected) {
+    void whatsapp.stop(false).catch((error) => {
+      logger.error({ error }, "Failed to stop WhatsApp after license lock");
+    });
+  }
+}, 60 * 1000);
+
+setInterval(() => {
   const result = cleanupPrintedFilesOlderThan(7);
   if (result.deleted > 0 || result.errors.length > 0) {
     logger.info({ result }, "Weekly printed files cleanup completed");

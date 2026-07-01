@@ -5,6 +5,7 @@ import { sendSystemAlert } from "./alerts.js";
 import { setPrintStatus } from "./db.js";
 import { logger } from "./logger.js";
 import { adminIncomingPrintMessage, queuedMessage, renderCustomerMessage } from "./customerMessages.js";
+import { getLicenseStatus } from "./license.js";
 
 type SendMessage = (remoteJid: string, text: string) => Promise<void>;
 
@@ -17,6 +18,7 @@ interface PendingPrintOrder {
   reminderTimer?: NodeJS.Timeout;
   expiryTimer?: NodeJS.Timeout;
   promoTimer?: NodeJS.Timeout;
+  customerMarketingTimer?: NodeJS.Timeout;
   isPrinting: boolean;
   createdAt: number;
   updatedAt: number;
@@ -162,15 +164,24 @@ export class PrintOrderManager {
     order.promoTimer = setTimeout(() => {
       void this.safeSend(order.remoteJid, this.getConfig().customerMessages.promo);
     }, reminderMs);
+    const marketing = this.getConfig().customerMarketing;
+    const delayMinutes = Number(marketing?.delayMinutes) || 0;
+    if (getLicenseStatus().mode === "licensed" && marketing?.enabled && marketing.message && delayMinutes > 0 && delayMinutes !== 10) {
+      order.customerMarketingTimer = setTimeout(() => {
+        void this.safeSend(order.remoteJid, marketing.message);
+      }, delayMinutes * 60 * 1000);
+    }
   }
 
   private clearTimers(order: PendingPrintOrder): void {
     if (order.reminderTimer) clearInterval(order.reminderTimer);
     if (order.expiryTimer) clearTimeout(order.expiryTimer);
     if (order.promoTimer) clearTimeout(order.promoTimer);
+    if (order.customerMarketingTimer) clearTimeout(order.customerMarketingTimer);
     order.reminderTimer = undefined;
     order.expiryTimer = undefined;
     order.promoTimer = undefined;
+    order.customerMarketingTimer = undefined;
   }
 
   private context(order: PendingPrintOrder): { phone: string; files: number; pages: number } {

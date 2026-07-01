@@ -2,6 +2,7 @@ node_modules/
 dist/
 runtime/
 Generator/
+release/
 
 # Runtime state - do not commit customer data, WhatsApp sessions, logs, or jobs.
 auth/*
@@ -24,6 +25,8 @@ logs/*
 config/settings.json
 config/license.json
 config/license-state.json
+config/trial-usage.json
+config/registration.json
 
 # Optional local tools. Keep binaries out of git unless a release explicitly needs them.
 tools/**/*.exe

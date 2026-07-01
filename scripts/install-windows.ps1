@@ -1,6 +1,7 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\MY-PC\WhatsAppPrintServer",
   [string]$RepoZipUrl = "https://github.com/roy200600/wahtsapp-print-server/archive/refs/heads/main.zip",
+  [switch]$EnableStartup,
   [switch]$NoStartup,
   [switch]$NoStart
 )
@@ -97,6 +98,51 @@ function Initialize-NodeRuntime($ProjectRoot) {
   Write-Host "Bundled Node.js installed: $RuntimeNode"
 }
 
+function Initialize-SumatraPdf($ProjectRoot) {
+  $SumatraDir = Join-Path $ProjectRoot "tools\SumatraPDF"
+  $SumatraExe = Join-Path $SumatraDir "SumatraPDF.exe"
+  if (Test-Path $SumatraExe) {
+    Write-Host "Using bundled SumatraPDF: $SumatraExe"
+    return
+  }
+
+  Write-Host "SumatraPDF was not found. Downloading portable SumatraPDF..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  New-Item -ItemType Directory -Force -Path $SumatraDir | Out-Null
+
+  $SumatraZip = Join-Path $env:TEMP "SumatraPDF-3.6.1-64.zip"
+  $ExtractRoot = Join-Path $env:TEMP "my-pc-sumatrapdf"
+  if (Test-Path $ExtractRoot) {
+    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+  }
+
+  $SumatraUrl = "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip"
+  Invoke-WebRequest -Uri $SumatraUrl -OutFile $SumatraZip
+  Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+
+  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "SumatraPDF.exe" | Select-Object -First 1
+  if (-not $DownloadedExe) {
+    throw "Could not extract SumatraPDF.exe from the portable package."
+  }
+
+  Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
+  Write-Host "SumatraPDF installed: $SumatraExe"
+}
+
+function New-AppShortcut($ProjectRoot, $ShortcutPath) {
+  $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
+  $Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`" -Hidden -OpenBrowser"
+
+  $Shell = New-Object -ComObject WScript.Shell
+  $Shortcut = $Shell.CreateShortcut($ShortcutPath)
+  $Shortcut.TargetPath = $PowerShellPath
+  $Shortcut.Arguments = $Arguments
+  $Shortcut.WorkingDirectory = [string]$ProjectRoot
+  $Shortcut.WindowStyle = 7
+  $Shortcut.Save()
+}
+
 $CurrentRoot = ""
 $UseCurrentFolder = $false
 
@@ -134,12 +180,24 @@ if ($UseCurrentFolder) {
 
 Set-Location -LiteralPath $ProjectRoot
 
+Write-Host "Stopping existing server if it is running..."
+Get-CimInstance Win32_Process |
+  Where-Object {
+    $_.Name -eq "node.exe" -and
+    ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
+  } |
+  ForEach-Object {
+    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+  }
+
 Initialize-NodeRuntime $ProjectRoot
 Enable-PortableNodePath $ProjectRoot $script:NodeExe
 
 foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "logs", "temp", "tools", "runtime")) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
+
+Initialize-SumatraPdf $ProjectRoot
 
 if (-not (Test-Path "config\settings.json") -and (Test-Path "config\settings.example.json")) {
   Copy-Item "config\settings.example.json" "config\settings.json"
@@ -155,22 +213,22 @@ if (Test-Path "package-lock.json") {
 Write-Host "Building project..."
 Invoke-Checked $script:NpmCmd @("run", "build")
 
-if (-not $NoStartup) {
+$DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "מערכת הדפסת WhatsApp - MY-PC.lnk"
+New-AppShortcut $ProjectRoot $DesktopShortcut
+Write-Host "Desktop shortcut created: $DesktopShortcut"
+
+if ($EnableStartup -and -not $NoStartup) {
   $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
   New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
   $ShortcutPath = Join-Path $StartupDir "MY-PC WhatsApp Print Server.lnk"
-  $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-  $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
-  $Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`" -Hidden"
-
-  $Shell = New-Object -ComObject WScript.Shell
-  $Shortcut = $Shell.CreateShortcut($ShortcutPath)
-  $Shortcut.TargetPath = $PowerShellPath
-  $Shortcut.Arguments = $Arguments
-  $Shortcut.WorkingDirectory = $ProjectRoot
-  $Shortcut.WindowStyle = 7
-  $Shortcut.Save()
+  New-AppShortcut $ProjectRoot $ShortcutPath
   Write-Host "Startup shortcut created: $ShortcutPath"
+} else {
+  $StartupShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\MY-PC WhatsApp Print Server.lnk"
+  if (Test-Path $StartupShortcutPath) {
+    Remove-Item -LiteralPath $StartupShortcutPath -Force
+    Write-Host "Startup shortcut removed for trial/default installation."
+  }
 }
 
 if (-not $NoStart) {

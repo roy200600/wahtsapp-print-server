@@ -21,7 +21,7 @@ export interface PdfPrintProfile {
 
 export interface AppConfig {
   printerName: string;
-  language: "he" | "en" | "ru";
+  language: "he" | "en";
   adminPassword: string;
   allowedNumbers: string[];
   allowedGroups: string[];
@@ -32,6 +32,7 @@ export interface AppConfig {
   sendWhatsappReply: boolean;
   allowGroupPrinting: boolean;
   customerMessages: CustomerMessagesConfig;
+  customerMarketing: CustomerMarketingConfig;
   copies: number;
   duplex: boolean;
   color: boolean;
@@ -109,6 +110,12 @@ export interface CustomerMessagesConfig {
   reminder: string;
   failed: string;
   promo: string;
+}
+
+export interface CustomerMarketingConfig {
+  enabled: boolean;
+  message: string;
+  delayMinutes: number;
 }
 
 export interface IncomingAttachment {
