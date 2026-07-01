@@ -1,0 +1,31 @@
+node_modules/
+dist/
+
+# Runtime state - do not commit customer data, WhatsApp sessions, logs, or jobs.
+auth/*
+data/*
+downloads/*
+printed/*
+failed/*
+temp/*
+logs/*
+
+!auth/.gitkeep
+!data/.gitkeep
+!downloads/.gitkeep
+!printed/.gitkeep
+!failed/.gitkeep
+!temp/.gitkeep
+!logs/.gitkeep
+
+# Local machine settings. Commit config/settings.example.json instead.
+config/settings.json
+
+# Optional local tools. Keep binaries out of git unless a release explicitly needs them.
+tools/**/*.exe
+tools/**/*.dll
+
+*.log
+.env
+.env.*
+codex_write_test.txt

@@ -1,0 +1,69 @@
+:root {
+  --primary: #2563eb;
+  --primary-strong: #1d4ed8;
+  --secondary: #1e293b;
+  --background: #0f172a;
+  --panel: #111827;
+  --panel-soft: rgba(17, 24, 39, 0.78);
+  --border: #334155;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --text: #f8fafc;
+  --text-secondary: #94a3b8;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  --radius: 18px;
+  --radius-sm: 10px;
+  --glass: rgba(15, 23, 42, 0.72);
+  --font: "Segoe UI", Inter, Roboto, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  direction: rtl;
+  color: var(--text);
+  font-family: var(--font);
+  background:
+    radial-gradient(circle at 15% 5%, rgba(37, 99, 235, 0.18), transparent 32%),
+    radial-gradient(circle at 80% 20%, rgba(34, 197, 94, 0.1), transparent 24%),
+    linear-gradient(135deg, #07111f 0%, var(--background) 48%, #07121f 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "printerName": "",
+  "language": "he",
+  "adminPassword": "",
+  "allowedNumbers": [],
+  "allowedGroups": [],
+  "allowedFileTypes": [
+    "pdf",
+    "jpg",
+    "jpeg",
+    "png",
+    "doc",
+    "docx",
+    "rtf",
+    "txt",
+    "csv",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx"
+  ],
+  "maxFileSizeMB": 25,
+  "autoPrint": true,
+  "deleteAfterPrint": false,
+  "sendWhatsappReply": false,
+  "allowGroupPrinting": false,
+  "copies": 1,
+  "duplex": false,
+  "color": true,
+  "sumatraPdfPath": "",
+  "pdfPrintProfile": {
+    "colorMode": "color",
+    "duplex": "simplex",
+    "orientation": "auto",
+    "paperSize": "A4",
+    "scaling": "fill-page",
+    "scalePercent": 90,
+    "copies": 1,
+    "dpi": 600,
+    "quality": "high",
+    "compatibilityMode": true
+  },
+  "officePrintProfile": {
+    "excelOrientation": "landscape",
+    "powerPointOrientation": "landscape",
+    "fitToWidth": true,
+    "paperSize": "A4"
+  },
+  "printerRoles": {
+    "defaultPrinter": "",
+    "blackWhitePrinter": "",
+    "colorPrinter": "",
+    "askColorPreference": false
+  },
+  "printerProfiles": [],
+  "pricing": {
+    "enabled": false,
+    "blackWhiteFirstPage": 1,
+    "blackWhiteAdditionalPage": 0.5,
+    "colorFirstPage": 3,
+    "colorAdditionalPage": 2,
+    "minimumOrder": 0,
+    "duplexDiscountPercent": 0
+  },
+  "email": {
+    "enabled": false,
+    "gmailAddress": "",
+    "appPassword": "",
+    "managerEmail": "",
+    "sendWhenWhatsappDisconnected": false
+  },
+  "branding": {
+    "footerText": "כל הזכויות שמורות למחשב שלי - מחברים אותך לעולם הטכנולוגי | מחלקת פיתוח",
+    "footerUrl": "https://my-pc.co.il",
+    "footerUrlLabel": "my-pc.co.il"
+  },
+  "alertsEnabled": false,
+  "alertsPhone": "",
+  "port": 3010
+}

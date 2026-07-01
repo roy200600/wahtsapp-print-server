@@ -1,0 +1,20 @@
+{
+  "name": "MY-PC WhatsApp Print Server",
+  "short_name": "MY-PC Print",
+  "description": "Local WhatsApp print server management dashboard",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "dir": "rtl",
+  "lang": "he",
+  "icons": [
+    {
+      "src": "/assets/my-pc-logo-blue.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

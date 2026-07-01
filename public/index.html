@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MY-PC WhatsApp Print Server</title>
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+  </head>
+  <body>
+    <div id="loader" class="loader-overlay hidden">
+      <div class="loader-card">
+        <div class="spinner"></div>
+        <span id="loaderText">טוען...</span>
+      </div>
+    </div>
+
+    <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+    <section id="loginView" class="login-view">
+      <div class="login-card glass-panel">
+        <img class="brand-logo large" src="/assets/my-pc-logo-white.png" alt="MY-PC" />
+        <h1>WhatsApp Print Server</h1>
+        <p id="loginSubtitle">כניסה למערכת ניהול ההדפסות</p>
+        <form id="loginForm" class="login-form">
+          <label class="field">
+            <span id="loginPasswordLabel">סיסמה</span>
+            <input id="loginPassword" type="password" autocomplete="current-password" />
+          </label>
+          <button class="btn btn-primary btn-wide" type="submit">
+            <i data-lucide="lock-keyhole"></i>
+            <span id="loginButtonText">כניסה</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <div id="appShell" class="app-shell hidden">
+      <aside class="side-nav glass-panel">
+        <div class="brand-block">
+          <img class="brand-logo" src="/assets/my-pc-logo-white.png" alt="MY-PC" />
+        </div>
+
+        <nav id="mainNav" class="nav-list" aria-label="ניווט ראשי"></nav>
+      </aside>
+
+      <main class="main-area">
+        <header class="app-header glass-panel">
+          <div class="header-title">
+            <div class="header-icon"><i data-lucide="message-circle"></i></div>
+            <div>
+              <h1 id="pageTitle">לוח בקרה</h1>
+              <p id="pageSubtitle">שרת הדפסה אוטומטי דרך WhatsApp</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <select id="languageSelect" class="language-select" aria-label="שפה">
+              <option value="he">עברית</option>
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+            </select>
+            <button id="resetBtn" class="btn btn-ghost"><i data-lucide="qr-code"></i><span>QR חדש</span></button>
+            <button id="startBtn" class="btn btn-primary"><i data-lucide="wifi"></i><span>חבר WhatsApp</span></button>
+            <button id="stopBtn" class="btn btn-danger-outline"><i data-lucide="power"></i><span>נתק</span></button>
+          </div>
+        </header>
+
+        <section id="pageHost" class="page-host"></section>
+      </main>
+    </div>
+
+    <footer id="appFooter" class="app-footer hidden">
+      <div class="footer-logo">
+        <img class="brand-logo mini" src="/assets/my-pc-logo-white.png" alt="MY-PC" />
+      </div>
+      <div class="footer-center">
+        <p>כל הזכויות שמורות למחשב שלי - מחברים אותך לעולם הטכנולוגי | מחלקת פיתוח</p>
+        <a href="https://my-pc.co.il" target="_blank" rel="noreferrer">my-pc.co.il</a>
+      </div>
+      <div class="footer-icons">
+        <i data-lucide="circle-help"></i>
+        <i data-lucide="globe"></i>
+        <i data-lucide="facebook"></i>
+        <i data-lucide="message-circle"></i>
+        <i data-lucide="github"></i>
+      </div>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

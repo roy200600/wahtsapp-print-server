@@ -1,0 +1,35 @@
+﻿{
+  "name": "whatsapp-print-server",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Windows WhatsApp print server MVP",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "start:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
+    "install:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows.ps1",
+    "uninstall:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-windows.ps1",
+    "service:install": "node dist/service/install-service.js",
+    "service:uninstall": "node dist/service/uninstall-service.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "express": "^4.21.2",
+    "file-type": "^19.6.0",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^11.0.3",
+    "winser": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
