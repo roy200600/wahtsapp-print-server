@@ -7,6 +7,13 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location -LiteralPath $ProjectRoot
 
+function Invoke-Checked($FilePath, [string[]]$Arguments) {
+  & $FilePath @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
+  }
+}
+
 function Get-NodeExe() {
   $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
   if (Test-Path $RuntimeNode) {
@@ -39,19 +46,21 @@ $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
 $NodeDir = Split-Path -Parent $NodeExe
 $env:Path = "$NodeDir;$env:Path"
+$env:npm_node_execpath = $NodeExe
+$env:NODE = $NodeExe
 
 if (-not (Test-Path "node_modules")) {
   Write-Host "Installing dependencies..."
   if (Test-Path "package-lock.json") {
-    & $NpmCmd ci
+    Invoke-Checked $NpmCmd @("ci")
   } else {
-    & $NpmCmd install
+    Invoke-Checked $NpmCmd @("install")
   }
 }
 
 if (-not (Test-Path "dist\main.js")) {
   Write-Host "Building project..."
-  & $NpmCmd run build
+  Invoke-Checked $NpmCmd @("run", "build")
 }
 
 foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "logs", "temp", "tools")) {

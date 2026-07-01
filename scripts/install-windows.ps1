@@ -7,6 +7,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-Checked($FilePath, [string[]]$Arguments) {
+  & $FilePath @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
+  }
+}
+
 function Initialize-NodeRuntime($ProjectRoot) {
   $NodeCommand = Get-Command "node.exe" -ErrorAction SilentlyContinue
   $NpmCommand = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
@@ -116,6 +123,8 @@ Set-Location -LiteralPath $ProjectRoot
 Initialize-NodeRuntime $ProjectRoot
 $NodeDir = Split-Path -Parent $script:NodeExe
 $env:Path = "$NodeDir;$env:Path"
+$env:npm_node_execpath = $script:NodeExe
+$env:NODE = $script:NodeExe
 
 foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "logs", "temp", "tools", "runtime")) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -127,13 +136,13 @@ if (-not (Test-Path "config\settings.json") -and (Test-Path "config\settings.exa
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {
-  & $script:NpmCmd ci
+  Invoke-Checked $script:NpmCmd @("ci")
 } else {
-  & $script:NpmCmd install
+  Invoke-Checked $script:NpmCmd @("install")
 }
 
 Write-Host "Building project..."
-& $script:NpmCmd run build
+Invoke-Checked $script:NpmCmd @("run", "build")
 
 if (-not $NoStartup) {
   $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"

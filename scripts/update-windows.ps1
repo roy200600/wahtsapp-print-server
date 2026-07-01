@@ -8,6 +8,13 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $TempZip = Join-Path $env:TEMP "whatsapp-print-server-update.zip"
 $ExtractRoot = Join-Path $env:TEMP "whatsapp-print-server-update-src"
 
+function Invoke-Checked($FilePath, [string[]]$Arguments) {
+  & $FilePath @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
+  }
+}
+
 function Get-NodeExe() {
   $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
   if (Test-Path $RuntimeNode) { return $RuntimeNode }
@@ -73,16 +80,18 @@ $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
 $NodeDir = Split-Path -Parent $NodeExe
 $env:Path = "$NodeDir;$env:Path"
+$env:npm_node_execpath = $NodeExe
+$env:NODE = $NodeExe
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {
-  & $NpmCmd ci
+  Invoke-Checked $NpmCmd @("ci")
 } else {
-  & $NpmCmd install
+  Invoke-Checked $NpmCmd @("install")
 }
 
 Write-Host "Building project..."
-& $NpmCmd run build
+Invoke-Checked $NpmCmd @("run", "build")
 
 if (-not $NoStart) {
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
