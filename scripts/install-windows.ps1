@@ -120,9 +120,12 @@ function Initialize-SumatraPdf($ProjectRoot) {
   Invoke-WebRequest -Uri $SumatraUrl -OutFile $SumatraZip
   Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
 
-  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "SumatraPDF.exe" | Select-Object -First 1
+  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "*.exe" |
+    Where-Object { $_.Name -like "SumatraPDF*.exe" } |
+    Select-Object -First 1
   if (-not $DownloadedExe) {
-    throw "Could not extract SumatraPDF.exe from the portable package."
+    $ExtractedFiles = (Get-ChildItem $ExtractRoot -Recurse | Select-Object -ExpandProperty Name) -join ", "
+    throw "Could not extract SumatraPDF executable from the portable package. Extracted files: $ExtractedFiles"
   }
 
   Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
