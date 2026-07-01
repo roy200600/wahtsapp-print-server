@@ -1,5 +1,6 @@
 node_modules/
 dist/
+runtime/
 
 # Runtime state - do not commit customer data, WhatsApp sessions, logs, or jobs.
 auth/*

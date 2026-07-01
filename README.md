@@ -19,7 +19,8 @@ Windows print server that receives files through WhatsApp Web, validates them, q
 ## Requirements
 
 - Windows 10 / Windows 11 / Windows Server.
-- Node.js 20 LTS or newer.
+- Automatic installer downloads a bundled portable Node.js runtime when Node is missing.
+- Manual install requires Node.js 20 LTS or newer.
 - A Windows printer already installed with a working driver.
 - Optional: SumatraPDF portable or installed version for PDF printing.
 
@@ -34,6 +35,7 @@ irm https://raw.githubusercontent.com/roy200600/wahtsapp-print-server/main/scrip
 The installer will:
 
 - Download the project when needed.
+- Download a portable Node.js runtime when Node is missing.
 - Install Node dependencies.
 - Build the app.
 - Create runtime folders.
