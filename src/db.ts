@@ -1,72 +1,61 @@
-import { DatabaseSync } from "node:sqlite";
+import fs from "node:fs";
 import { databasePath } from "./paths.js";
 import { ensureDirectories } from "./config.js";
 import { getPrintDuration } from "./printMetrics.js";
 import type { PrintLogEntry, PrintStatus } from "./types.js";
 
+type StoredPrintJob = {
+  id: string;
+  message_key: string;
+  created_at: string;
+  sender_name?: string;
+  sender_phone?: string;
+  group_name?: string | null;
+  chat_id: string;
+  file_name: string;
+  file_type: string;
+  mime_type: string;
+  size_bytes: number;
+  file_path: string;
+  printer_name?: string;
+  status: PrintStatus;
+  failure_reason?: string | null;
+};
+
 ensureDirectories();
 
-export const db = new DatabaseSync(databasePath);
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS print_jobs (
-  id TEXT PRIMARY KEY,
-  message_key TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL,
-  sender_name TEXT,
-  sender_phone TEXT,
-  group_name TEXT,
-  chat_id TEXT NOT NULL,
-  file_name TEXT NOT NULL,
-  file_type TEXT NOT NULL,
-  mime_type TEXT NOT NULL,
-  size_bytes INTEGER NOT NULL,
-  file_path TEXT NOT NULL,
-  printer_name TEXT,
-  status TEXT NOT NULL,
-  failure_reason TEXT
-);
-`);
-
-const insertJob = db.prepare(`
-INSERT OR REPLACE INTO print_jobs (
-  id, message_key, created_at, sender_name, sender_phone, group_name, chat_id,
-  file_name, file_type, mime_type, size_bytes, file_path, printer_name, status, failure_reason
-) VALUES (
-  :id, :messageKey, :createdAt, :senderName, :senderPhone, :groupName, :chatId,
-  :fileName, :extension, :mimeType, :sizeBytes, :filePath, :printerName, :status, :failureReason
-)
-`);
-
-const updateStatus = db.prepare(`
-UPDATE print_jobs
-SET status = ?, failure_reason = ?, printer_name = ?
-WHERE id = ?
-`);
-
 export function hasMessage(messageKey: string): boolean {
-  const row = db.prepare("SELECT id FROM print_jobs WHERE message_key = ?").get(messageKey);
-  return Boolean(row);
+  return readJobs().some((job) => job.message_key === messageKey);
 }
 
 export function savePrintLog(entry: PrintLogEntry): void {
-  insertJob.run({
+  const jobs = readJobs();
+  const job: StoredPrintJob = {
     id: entry.id,
-    messageKey: entry.messageKey,
-    createdAt: entry.createdAt,
-    senderName: entry.senderName,
-    senderPhone: entry.senderPhone,
-    groupName: entry.groupName ?? null,
-    chatId: entry.chatId,
-    fileName: entry.fileName,
-    extension: entry.extension,
-    mimeType: entry.mimeType,
-    sizeBytes: entry.sizeBytes,
-    filePath: entry.filePath,
-    printerName: entry.printerName,
+    message_key: entry.messageKey,
+    created_at: entry.createdAt,
+    sender_name: entry.senderName,
+    sender_phone: entry.senderPhone,
+    group_name: entry.groupName ?? null,
+    chat_id: entry.chatId,
+    file_name: entry.fileName,
+    file_type: entry.extension,
+    mime_type: entry.mimeType,
+    size_bytes: entry.sizeBytes,
+    file_path: entry.filePath,
+    printer_name: entry.printerName,
     status: entry.status,
-    failureReason: entry.failureReason ?? null
-  });
+    failure_reason: entry.failureReason ?? null
+  };
+
+  const index = jobs.findIndex((existing) => existing.id === job.id || existing.message_key === job.message_key);
+  if (index >= 0) {
+    jobs[index] = job;
+  } else {
+    jobs.push(job);
+  }
+
+  writeJobs(jobs);
 }
 
 export function setPrintStatus(
@@ -75,18 +64,43 @@ export function setPrintStatus(
   failureReason: string | undefined,
   printerName: string
 ): void {
-  updateStatus.run(status, failureReason ?? null, printerName, id);
+  const jobs = readJobs();
+  const job = jobs.find((existing) => existing.id === id);
+  if (!job) {
+    return;
+  }
+
+  job.status = status;
+  job.failure_reason = failureReason ?? null;
+  job.printer_name = printerName;
+  writeJobs(jobs);
 }
 
 export function listRecentJobs(limit = 100): unknown[] {
-  return db
-    .prepare("SELECT * FROM print_jobs ORDER BY created_at DESC LIMIT ?")
-    .all(limit)
-    .map((job) => {
-      const row = job as Record<string, unknown>;
-      return {
-        ...row,
-        duration_ms: typeof row.id === "string" ? (getPrintDuration(row.id) ?? null) : null
-      };
-    });
+  return readJobs()
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))
+    .slice(0, limit)
+    .map((job) => ({
+      ...job,
+      duration_ms: getPrintDuration(job.id) ?? null
+    }));
+}
+
+function readJobs(): StoredPrintJob[] {
+  ensureDirectories();
+  if (!fs.existsSync(databasePath)) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(databasePath, "utf8").replace(/^\uFEFF/, ""));
+    return Array.isArray(parsed.jobs) ? parsed.jobs : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeJobs(jobs: StoredPrintJob[]): void {
+  ensureDirectories();
+  fs.writeFileSync(databasePath, JSON.stringify({ jobs }, null, 2), "utf8");
 }
