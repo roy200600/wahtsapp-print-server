@@ -16,8 +16,16 @@ function Require-Command($Name, $InstallHint) {
 Require-Command "node.exe" "Install Node.js LTS from https://nodejs.org/"
 Require-Command "npm.cmd" "Install Node.js LTS from https://nodejs.org/"
 
-$CurrentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$UseCurrentFolder = Test-Path (Join-Path $CurrentRoot "package.json")
+$CurrentRoot = ""
+$UseCurrentFolder = $false
+
+if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+  $CandidateRoot = Join-Path $PSScriptRoot ".."
+  if (Test-Path $CandidateRoot) {
+    $CurrentRoot = (Resolve-Path $CandidateRoot).Path
+    $UseCurrentFolder = Test-Path (Join-Path $CurrentRoot "package.json")
+  }
+}
 
 if ($UseCurrentFolder) {
   $ProjectRoot = $CurrentRoot
