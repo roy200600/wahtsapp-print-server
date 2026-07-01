@@ -15,6 +15,20 @@ function Invoke-Checked($FilePath, [string[]]$Arguments) {
   }
 }
 
+function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
+  $NodeDir = Split-Path -Parent $NodeExe
+  $ShimDir = Join-Path $ProjectRoot "runtime\bin"
+  $ShimPath = Join-Path $ShimDir "node.cmd"
+  New-Item -ItemType Directory -Force -Path $ShimDir | Out-Null
+  Set-Content -Path $ShimPath -Encoding ASCII -Value @(
+    "@echo off",
+    "`"$NodeExe`" %*"
+  )
+  $env:Path = "$ShimDir;$NodeDir;$env:Path"
+  $env:npm_node_execpath = $NodeExe
+  $env:NODE = $NodeExe
+}
+
 function Get-NodeExe() {
   $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
   if (Test-Path $RuntimeNode) { return $RuntimeNode }
@@ -78,10 +92,7 @@ Get-ChildItem $Source.FullName -Force | ForEach-Object {
 Set-Location -LiteralPath $ProjectRoot
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
-$NodeDir = Split-Path -Parent $NodeExe
-$env:Path = "$NodeDir;$env:Path"
-$env:npm_node_execpath = $NodeExe
-$env:NODE = $NodeExe
+Enable-PortableNodePath $ProjectRoot $NodeExe
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {

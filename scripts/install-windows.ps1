@@ -14,6 +14,20 @@ function Invoke-Checked($FilePath, [string[]]$Arguments) {
   }
 }
 
+function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
+  $NodeDir = Split-Path -Parent $NodeExe
+  $ShimDir = Join-Path $ProjectRoot "runtime\bin"
+  $ShimPath = Join-Path $ShimDir "node.cmd"
+  New-Item -ItemType Directory -Force -Path $ShimDir | Out-Null
+  Set-Content -Path $ShimPath -Encoding ASCII -Value @(
+    "@echo off",
+    "`"$NodeExe`" %*"
+  )
+  $env:Path = "$ShimDir;$NodeDir;$env:Path"
+  $env:npm_node_execpath = $NodeExe
+  $env:NODE = $NodeExe
+}
+
 function Initialize-NodeRuntime($ProjectRoot) {
   $NodeCommand = Get-Command "node.exe" -ErrorAction SilentlyContinue
   $NpmCommand = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
@@ -121,10 +135,7 @@ if ($UseCurrentFolder) {
 Set-Location -LiteralPath $ProjectRoot
 
 Initialize-NodeRuntime $ProjectRoot
-$NodeDir = Split-Path -Parent $script:NodeExe
-$env:Path = "$NodeDir;$env:Path"
-$env:npm_node_execpath = $script:NodeExe
-$env:NODE = $script:NodeExe
+Enable-PortableNodePath $ProjectRoot $script:NodeExe
 
 foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "logs", "temp", "tools", "runtime")) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
