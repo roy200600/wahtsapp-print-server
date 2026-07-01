@@ -9,6 +9,7 @@ import {
   cleanupPrintedFiles,
   disableStartup,
   enableStartup,
+  getCurrentVersion,
   getStartupStatus,
   runUpdate
 } from "./maintenance.js";
@@ -26,10 +27,21 @@ import type { WhatsAppService } from "./whatsapp.js";
 export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (config: AppConfig) => void) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
-  app.use(express.static(path.join(rootDir, "public")));
+  app.use(express.static(path.join(rootDir, "public"), {
+    setHeaders(res, filePath) {
+      if (/\.(js|css)$/.test(filePath) || filePath.endsWith("sw.js")) {
+        res.setHeader("Cache-Control", "no-store");
+      }
+    }
+  }));
 
   app.get("/api/status", (_req, res) => {
-    res.json({ whatsapp: whatsapp.getState(), config: sanitizeConfig(loadConfig()), license: getLicenseStatus() });
+    res.json({
+      whatsapp: whatsapp.getState(),
+      config: sanitizeConfig(loadConfig()),
+      license: getLicenseStatus(),
+      version: getCurrentVersion()
+    });
   });
 
   app.get("/api/license/status", (_req, res) => {

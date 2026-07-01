@@ -1332,7 +1332,7 @@ function renderAbout() {
         <h2>MY-PC WhatsApp Print Server</h2>
         <p>מערכת ניהול הדפסות אוטומטית שפותחה ומתוחזקת על ידי MY-PC - מחברים אותך לעולם הטכנולוגי.</p>
         <div class="about-grid">
-          <span>גרסת מערכת</span><strong>1.0.0 / Licensed Release</strong>
+          <span>גרסת מערכת</span><strong>${escapeHtml(state.status?.version || "1.0.1")} / Licensed Release</strong>
           <span>אתר</span><a href="https://my-pc.co.il" target="_blank" rel="noreferrer">my-pc.co.il</a>
           <span>WhatsApp</span><strong>052-225-0223</strong>
           <span>מפתח</span><strong>מחלקת פיתוח MY-PC</strong>
