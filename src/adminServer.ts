@@ -14,6 +14,7 @@ import {
 } from "./maintenance.js";
 import { stopPrintQueue } from "./printQueue.js";
 import { sendTestAlert } from "./alerts.js";
+import { activateLicense, assertLicenseCanRun, getLicenseStatus } from "./license.js";
 import {
   checkWindowsPrinterCompatibility,
   listWindowsPrinterDetails,
@@ -28,7 +29,19 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   app.use(express.static(path.join(rootDir, "public")));
 
   app.get("/api/status", (_req, res) => {
-    res.json({ whatsapp: whatsapp.getState(), config: sanitizeConfig(loadConfig()) });
+    res.json({ whatsapp: whatsapp.getState(), config: sanitizeConfig(loadConfig()), license: getLicenseStatus() });
+  });
+
+  app.get("/api/license/status", (_req, res) => {
+    res.json(getLicenseStatus());
+  });
+
+  app.post("/api/license/activate", (req, res) => {
+    try {
+      res.json(activateLicense(req.body?.license ?? req.body));
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.get("/api/auth/status", (_req, res) => {
@@ -179,8 +192,13 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   });
 
   app.post("/api/whatsapp/start", async (_req, res) => {
-    await whatsapp.start();
-    res.json(whatsapp.getState());
+    try {
+      assertLicenseCanRun();
+      await whatsapp.start();
+      res.json(whatsapp.getState());
+    } catch (error) {
+      res.status(403).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.post("/api/whatsapp/stop", async (_req, res) => {
@@ -189,8 +207,13 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
   });
 
   app.post("/api/whatsapp/reset", async (_req, res) => {
-    await whatsapp.reset();
-    res.json(whatsapp.getState());
+    try {
+      assertLicenseCanRun();
+      await whatsapp.reset();
+      res.json(whatsapp.getState());
+    } catch (error) {
+      res.status(403).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   return app;

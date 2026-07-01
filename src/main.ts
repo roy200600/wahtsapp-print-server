@@ -5,6 +5,7 @@ import { WhatsAppService } from "./whatsapp.js";
 import { logger } from "./logger.js";
 import { sendSystemAlert } from "./alerts.js";
 import { cleanupPrintedFilesOlderThan } from "./maintenance.js";
+import { getLicenseStatus } from "./license.js";
 
 ensureDirectories();
 
@@ -19,10 +20,15 @@ app.listen(runtimeConfig.port, () => {
   console.log(`WhatsApp Print Server running: http://localhost:${runtimeConfig.port}`);
 });
 
-void whatsapp.start().catch((error) => {
-  logger.error({ error }, "WhatsApp failed to start");
-  sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
-});
+const licenseStatus = getLicenseStatus();
+if (licenseStatus.canRun) {
+  void whatsapp.start().catch((error) => {
+    logger.error({ error }, "WhatsApp failed to start");
+    sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
+  });
+} else {
+  logger.warn({ licenseStatus }, "WhatsApp auto-start blocked by license status");
+}
 
 setInterval(() => {
   const result = cleanupPrintedFilesOlderThan(7);

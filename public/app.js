@@ -3,6 +3,7 @@ const state = {
   authConfigured: false,
   config: null,
   status: null,
+  license: null,
   jobs: [],
   printers: [],
   printedFiles: [],
@@ -28,7 +29,7 @@ const translations = {
   },
   en: {
     dashboard: "Dashboard", settings: "Settings", contacts: "Allowed Contacts", logs: "Print Log",
-    files: "Printed Files", pricing: "Pricing", diagnostics: "Log Files", advanced: "Advanced", about: "About",
+    files: "Printed Files", pricing: "Pricing", diagnostics: "Log Files", advanced: "Advanced", about: "About", license: "License",
     dashboardSub: "Full view of print activity", settingsSub: "Printers, messages, profiles and alerts",
     contactsSub: "Customers, numbers and groups", logsSub: "Jobs and print history",
     filesSub: "Files saved after printing", pricingSub: "Price rules and calculations",
@@ -229,6 +230,7 @@ function getPages() {
     ["logs", "list-checks", t("logs"), t("logsSub")],
     ["files", "folder-open", t("files"), t("filesSub")],
     ["pricing", "calculator", t("pricing"), t("pricingSub")],
+    ["license", "key-round", lang() === "he" ? "רישוי" : "License", lang() === "he" ? "Trial, קוד מחשב והפעלת רישיון" : "Trial, machine code and activation"],
     ["diagnostics", "file-terminal", t("diagnostics"), t("diagnosticsSub")],
     ["advanced", "sliders-horizontal", t("advanced"), t("advancedSub")],
     ["about", "info", t("about"), t("aboutSub")]
@@ -441,6 +443,7 @@ async function loadAll() {
     api("/api/log-files").catch(() => [])
   ]);
   state.status = status;
+  state.license = status.license;
   state.config = status.config;
   state.jobs = jobs;
   state.printers = printers;
@@ -466,6 +469,7 @@ function render() {
     logs: renderLogs,
     files: renderFiles,
     pricing: renderPricing,
+    license: renderLicense,
     diagnostics: renderDiagnostics,
     advanced: renderAdvanced,
     about: renderAbout
@@ -481,6 +485,7 @@ function render() {
 function bindPage() {
   if (state.currentPage === "settings") bindSettings();
   if (state.currentPage === "pricing") bindPricing();
+  if (state.currentPage === "license") bindLicense();
   if (state.currentPage === "contacts") bindContacts();
   if (state.currentPage === "diagnostics") bindDiagnostics();
   if (state.currentPage === "advanced") bindAdvanced();
@@ -1117,6 +1122,116 @@ function bindPricing() {
   });
 }
 
+function renderLicense() {
+  const license = state.license || {};
+  const statusText = license.mode === "licensed"
+    ? "רישיון פעיל"
+    : license.mode === "trial"
+      ? `תקופת ניסיון פעילה - נותרו ${license.trialDaysLeft || 0} ימים`
+      : license.mode === "expired"
+        ? "תקופת הניסיון הסתיימה"
+        : "הרישיון אינו תקין";
+  const statusType = license.canRun ? "success" : "error";
+  const requestText = [
+    "בקשת רישיון MY-PC WhatsApp Print Server",
+    "",
+    "שם לקוח: ",
+    "טלפון: ",
+    "אימייל: ",
+    `קוד מחשב: ${license.machineCode || ""}`,
+    `Machine ID: ${license.machineId || ""}`,
+    `מצב: ${license.mode || ""}`
+  ].join("\n");
+
+  return `
+    <section class="two-column fade-in">
+      <article class="panel">
+        ${sectionTitle("key-round", "רישוי מערכת", "רישיון חתום דיגיטלית, Trial וקוד מחשב")}
+        <div class="license-status-card ${statusType}">
+          <strong>${statusText}</strong>
+          <span>${escapeHtml(license.reason || (license.expiresAt ? `בתוקף עד ${formatDate(license.expiresAt)}` : "Trial ל-14 יום מההפעלה הראשונה"))}</span>
+        </div>
+        <div class="compat-card">
+          <div><span>קוד מחשב</span><b>${escapeHtml(license.machineCode || "")}</b></div>
+          <div><span>Machine ID</span><b>${escapeHtml(license.machineId || "")}</b></div>
+          <div><span>תחילת Trial</span><b>${formatDate(license.trialStartedAt)}</b></div>
+          <div><span>סיום Trial</span><b>${formatDate(license.trialEndsAt)}</b></div>
+          <div><span>לקוח</span><b>${escapeHtml(license.customerName || "-")}</b></div>
+          <div><span>מספר רישיון</span><b>${escapeHtml(license.licenseId || "-")}</b></div>
+        </div>
+      </article>
+      <article class="panel">
+        ${sectionTitle("copy", "פרטים לשליחה ל-MY-PC", "הלקוח מעתיק ושולח לך את הפרטים האלה")}
+        <div class="form-grid">
+          ${inputField("licenseCustomerName", "שם לקוח / עסק", "")}
+          ${inputField("licenseCustomerPhone", "טלפון", "")}
+          ${inputField("licenseCustomerEmail", "אימייל", "")}
+        </div>
+        <label class="field full"><span>בקשת רישיון</span><textarea id="licenseRequestText" rows="8">${escapeHtml(requestText)}</textarea></label>
+        <div class="inline-actions">
+          <button id="copyMachineCodeBtn" type="button" class="btn btn-muted"><i data-lucide="copy"></i><span>העתק קוד מחשב</span></button>
+          <button id="copyLicenseRequestBtn" type="button" class="btn btn-primary"><i data-lucide="clipboard"></i><span>העתק בקשת רישיון</span></button>
+        </div>
+      </article>
+      <article class="panel wide">
+        ${sectionTitle("badge-check", "הפעלת רישיון", "הדבק כאן את תוכן license.json שקיבלת מ-MY-PC")}
+        <label class="field full"><span>license.json</span><textarea id="licenseInput" rows="10" placeholder='{"payload":...,"signature":"..."}'></textarea></label>
+        <div class="inline-actions">
+          <button id="activateLicenseBtn" type="button" class="btn btn-success"><i data-lucide="shield-check"></i><span>הפעל רישיון</span></button>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function bindLicense() {
+  const refreshRequestText = () => {
+    const license = state.license || {};
+    const name = document.querySelector("[name='licenseCustomerName']")?.value || "";
+    const phone = document.querySelector("[name='licenseCustomerPhone']")?.value || "";
+    const email = document.querySelector("[name='licenseCustomerEmail']")?.value || "";
+    $("#licenseRequestText").value = [
+      "בקשת רישיון MY-PC WhatsApp Print Server",
+      "",
+      `שם לקוח: ${name}`,
+      `טלפון: ${phone}`,
+      `אימייל: ${email}`,
+      `קוד מחשב: ${license.machineCode || ""}`,
+      `Machine ID: ${license.machineId || ""}`,
+      `מצב: ${license.mode || ""}`
+    ].join("\n");
+  };
+
+  ["licenseCustomerName", "licenseCustomerPhone", "licenseCustomerEmail"].forEach((name) => {
+    document.querySelector(`[name='${name}']`)?.addEventListener("input", refreshRequestText);
+  });
+
+  $("#copyMachineCodeBtn")?.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(state.license?.machineCode || "");
+    notify("success", "קוד המחשב הועתק.");
+  });
+
+  $("#copyLicenseRequestBtn")?.addEventListener("click", async () => {
+    await navigator.clipboard.writeText($("#licenseRequestText").value);
+    notify("success", "בקשת הרישיון הועתקה.");
+  });
+
+  $("#activateLicenseBtn")?.addEventListener("click", async () => {
+    setLoading(true, "מפעיל רישיון...");
+    try {
+      const licenseText = $("#licenseInput").value.trim();
+      state.license = await api("/api/license/activate", postJson({ license: licenseText }));
+      await loadAll();
+      render();
+      notify("success", "הרישיון הופעל בהצלחה.");
+    } catch (error) {
+      notify("error", error.message || "הפעלת הרישיון נכשלה.");
+    } finally {
+      setLoading(false);
+    }
+  });
+}
+
 function renderDiagnostics() {
   return `
     <section class="two-column fade-in">
@@ -1217,7 +1332,7 @@ function renderAbout() {
         <h2>MY-PC WhatsApp Print Server</h2>
         <p>מערכת ניהול הדפסות אוטומטית שפותחה ומתוחזקת על ידי MY-PC - מחברים אותך לעולם הטכנולוגי.</p>
         <div class="about-grid">
-          <span>גרסת מערכת</span><strong>0.1.0 / VER 1 Foundation</strong>
+          <span>גרסת מערכת</span><strong>1.0.0 / Licensed Release</strong>
           <span>אתר</span><a href="https://my-pc.co.il" target="_blank" rel="noreferrer">my-pc.co.il</a>
           <span>WhatsApp</span><strong>052-225-0223</strong>
           <span>מפתח</span><strong>מחלקת פיתוח MY-PC</strong>

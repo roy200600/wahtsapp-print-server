@@ -89,6 +89,18 @@ You can also use the app dashboard:
 
 `הגדרות` → `מתקדם` → `עדכוני מערכת`
 
+## Offline Licensing
+
+Version 1.0.0 includes offline licensing:
+
+- 14-day trial from first run.
+- Digitally signed license files.
+- License lock by machine ID.
+- License activation from the local management UI.
+
+The private license generator is intentionally excluded from Git under `Generator/`.
+Do not publish the private key or generator files.
+
 ## Remove Startup Shortcut
 
 ```powershell
@@ -110,10 +122,13 @@ These folders are runtime-only and are ignored by Git:
 - `logs`
 - `dist`
 - `node_modules`
+- `Generator`
 
 Local settings are also ignored:
 
 - `config/settings.json`
+- `config/license.json`
+- `config/license-state.json`
 
 Commit this clean template instead:
 
