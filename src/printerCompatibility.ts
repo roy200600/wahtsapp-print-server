@@ -156,6 +156,8 @@ export async function assertPrinterAvailable(printerName: string): Promise<void>
 
 async function runPrinterProbe(): Promise<Array<Record<string, unknown>>> {
   const script = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $defaultPrinter = (Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1 -ExpandProperty Name)
 $printers = Get-Printer | ForEach-Object {
   $printer = $_
@@ -192,6 +194,7 @@ $printers = Get-Printer | ForEach-Object {
 $printers | ConvertTo-Json -Depth 5
 `;
   const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", script], {
+    encoding: "utf8",
     maxBuffer: 1024 * 1024 * 4
   });
   const parsed = JSON.parse(stdout || "[]");

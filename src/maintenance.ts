@@ -8,6 +8,7 @@ import { appPaths, rootDir } from "./paths.js";
 const execFileAsync = promisify(execFile);
 const startupShortcutName = "WhatsApp Print Server.lnk";
 const registryRunName = "WhatsAppPrintServer";
+const repoApiLatestCommitUrl = "https://api.github.com/repos/roy200600/wahtsapp-print-server/commits/main";
 
 export function cleanupPrintedFiles(): { deleted: number; errors: Array<{ file: string; error: string }> } {
   fs.mkdirSync(appPaths.printedDir, { recursive: true });
@@ -103,6 +104,36 @@ export function disableStartup(): { enabled: boolean; shortcutPath: string } {
   return getStartupStatus();
 }
 
+export async function checkForUpdates(): Promise<{ available: boolean; current: string; latest: string; message: string }> {
+  const current = getCurrentRevision();
+  const latest = await getLatestRevision();
+  const available = Boolean(latest && latest !== current);
+  return {
+    available,
+    current,
+    latest,
+    message: available ? "נמצא עדכון חדש ב-GitHub." : "המערכת מעודכנת."
+  };
+}
+
+export async function runUpdate(): Promise<{ started: boolean; message: string }> {
+  const scriptPath = path.join(rootDir, "scripts", "update-windows.ps1");
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error("Update script was not found.");
+  }
+
+  const powershellPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+  await execFileAsync(powershellPath, [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    scriptPath
+  ]);
+
+  return { started: true, message: "העדכון הסתיים. אם הדפדפן נשאר פתוח, רענן את הדף." };
+}
+
 function getStartupShortcutPath(): string {
   return path.join(
     os.homedir(),
@@ -154,7 +185,39 @@ function startupScriptContent(): string {
     "$ErrorActionPreference = \"Stop\"",
     `$project = ${JSON.stringify(rootDir)}`,
     "Set-Location -LiteralPath $project",
-    "$node = (Get-Command node.exe -ErrorAction Stop).Source",
+    "$runtimeNode = Join-Path $project 'runtime\\node\\node.exe'",
+    "if (Test-Path $runtimeNode) { $node = $runtimeNode } else { $node = (Get-Command node.exe -ErrorAction Stop).Source }",
     "Start-Process -FilePath $node -ArgumentList @('dist/main.js') -WorkingDirectory $project -WindowStyle Hidden"
   ].join("\r\n");
+}
+
+function getCurrentRevision(): string {
+  const gitHeadPath = path.join(rootDir, ".git", "HEAD");
+  if (!fs.existsSync(gitHeadPath)) return "unknown";
+
+  const head = fs.readFileSync(gitHeadPath, "utf8").trim();
+  if (!head.startsWith("ref:")) return head.slice(0, 12);
+
+  const refPath = path.join(rootDir, ".git", head.replace("ref:", "").trim());
+  if (!fs.existsSync(refPath)) return "unknown";
+  return fs.readFileSync(refPath, "utf8").trim().slice(0, 12);
+}
+
+async function getLatestRevision(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      [
+        "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
+        `$response = Invoke-RestMethod -Uri ${JSON.stringify(repoApiLatestCommitUrl)} -Headers @{ 'User-Agent' = 'MY-PC-WhatsAppPrintServer' }`,
+        "$response.sha"
+      ].join("; ")
+    ]);
+    return stdout.trim().slice(0, 12);
+  } catch {
+    return "unknown";
+  }
 }

@@ -4,7 +4,14 @@ import path from "node:path";
 import { appPaths, rootDir } from "./paths.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listRecentJobs } from "./db.js";
-import { cleanupPrintedFiles, disableStartup, enableStartup, getStartupStatus } from "./maintenance.js";
+import {
+  checkForUpdates,
+  cleanupPrintedFiles,
+  disableStartup,
+  enableStartup,
+  getStartupStatus,
+  runUpdate
+} from "./maintenance.js";
 import { stopPrintQueue } from "./printQueue.js";
 import { sendTestAlert } from "./alerts.js";
 import {
@@ -136,6 +143,22 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
 
   app.post("/api/startup/disable", (_req, res) => {
     res.json(disableStartup());
+  });
+
+  app.get("/api/updates/check", async (_req, res) => {
+    try {
+      res.json(await checkForUpdates());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/updates/run", async (_req, res) => {
+    try {
+      res.json(await runUpdate());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   app.post("/api/printed/cleanup", (_req, res) => {

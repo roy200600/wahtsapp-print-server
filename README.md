@@ -77,6 +77,18 @@ Start hidden in background:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1 -Hidden
 ```
 
+## Update From GitHub
+
+From the installed app folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/update-windows.ps1
+```
+
+You can also use the app dashboard:
+
+`הגדרות` → `מתקדם` → `עדכוני מערכת`
+
 ## Remove Startup Shortcut
 
 ```powershell

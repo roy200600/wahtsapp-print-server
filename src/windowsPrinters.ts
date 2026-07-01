@@ -12,13 +12,11 @@ export async function listWindowsPrinters(): Promise<string[]> {
   const { stdout } = await execFileAsync("powershell.exe", [
     "-NoProfile",
     "-Command",
-    "Get-Printer | Select-Object -ExpandProperty Name"
-  ]);
+    "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json"
+  ], { encoding: "utf8" });
 
-  return stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const parsed = JSON.parse(stdout || "[]");
+  return (Array.isArray(parsed) ? parsed : [parsed]).map((name) => String(name).trim()).filter(Boolean);
 }
 
 export async function listWindowsPrinterDetails(): Promise<PrinterCompatibilityInfo[]> {

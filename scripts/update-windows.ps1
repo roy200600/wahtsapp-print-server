@@ -1,0 +1,99 @@
+param(
+  [string]$RepoZipUrl = "https://github.com/roy200600/wahtsapp-print-server/archive/refs/heads/main.zip",
+  [switch]$NoStart
+)
+
+$ErrorActionPreference = "Stop"
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$TempZip = Join-Path $env:TEMP "whatsapp-print-server-update.zip"
+$ExtractRoot = Join-Path $env:TEMP "whatsapp-print-server-update-src"
+
+function Get-NodeExe() {
+  $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
+  if (Test-Path $RuntimeNode) { return $RuntimeNode }
+  $Command = Get-Command "node.exe" -ErrorAction SilentlyContinue
+  if ($Command) { return $Command.Source }
+  throw "Node.js was not found. Run scripts\install-windows.ps1 first."
+}
+
+function Get-NpmCmd() {
+  $RuntimeNpm = Join-Path $ProjectRoot "runtime\node\npm.cmd"
+  if (Test-Path $RuntimeNpm) { return $RuntimeNpm }
+  $Command = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
+  if ($Command) { return $Command.Source }
+  throw "npm was not found. Run scripts\install-windows.ps1 first."
+}
+
+Write-Host "Stopping running server..."
+Get-CimInstance Win32_Process |
+  Where-Object {
+    $_.Name -eq "node.exe" -and
+    ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
+  } |
+  ForEach-Object {
+    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+  }
+
+if (Test-Path $ExtractRoot) {
+  Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+}
+
+Write-Host "Downloading latest version..."
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest -Uri $RepoZipUrl -OutFile $TempZip
+Expand-Archive -Path $TempZip -DestinationPath $ExtractRoot -Force
+
+$Source = Get-ChildItem $ExtractRoot -Directory | Select-Object -First 1
+if (-not $Source) {
+  throw "Could not find extracted project folder."
+}
+
+$Preserve = @(
+  "auth",
+  "config\settings.json",
+  "data",
+  "downloads",
+  "printed",
+  "failed",
+  "logs",
+  "temp",
+  "runtime",
+  "tools"
+)
+
+Write-Host "Copying update files..."
+Get-ChildItem $Source.FullName -Force | ForEach-Object {
+  $relative = $_.Name
+  if ($Preserve -contains $relative) { return }
+  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $ProjectRoot $relative) -Recurse -Force
+}
+
+Set-Location -LiteralPath $ProjectRoot
+$NpmCmd = Get-NpmCmd
+
+Write-Host "Installing dependencies..."
+if (Test-Path "package-lock.json") {
+  & $NpmCmd ci
+} else {
+  & $NpmCmd install
+}
+
+Write-Host "Building project..."
+& $NpmCmd run build
+
+if (-not $NoStart) {
+  $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
+  Start-Process -FilePath $PowerShellPath -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    $StartScript,
+    "-Hidden"
+  ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+}
+
+Write-Host "Update complete."

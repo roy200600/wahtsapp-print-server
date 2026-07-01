@@ -124,6 +124,11 @@ const phraseTranslations = {
   "בדיקת Excel": { en: "Excel Test", ru: "Проверка Excel" },
   "בדיקת PowerPoint": { en: "PowerPoint Test", ru: "Проверка PowerPoint" },
   "עצור הדפסה מיד": { en: "Stop Printing Now", ru: "Остановить печать сейчас" },
+  "עדכוני מערכת": { en: "System Updates", ru: "Обновления системы" },
+  "בדיקת עדכונים והתקנה מתוך GitHub": { en: "Check and install updates from GitHub", ru: "Проверка и установка обновлений из GitHub" },
+  "לא בוצעה בדיקת עדכונים.": { en: "No update check was performed.", ru: "Проверка обновлений еще не выполнялась." },
+  "בדוק עדכונים": { en: "Check Updates", ru: "Проверить обновления" },
+  "התקן עדכון עכשיו": { en: "Install Update Now", ru: "Установить обновление сейчас" },
   "כללי": { en: "General", ru: "Общие" },
   "פרופיל PDF": { en: "PDF Profile", ru: "Профиль PDF" },
   "שם פנימי": { en: "Internal Name", ru: "Внутреннее имя" },
@@ -1155,6 +1160,14 @@ function renderAdvanced() {
           <button id="disableStartupBtn" class="btn btn-muted"><i data-lucide="ban"></i><span>בטל הפעלה</span></button>
         </div>
       </article>
+      <article class="panel wide">
+        ${sectionTitle("download-cloud", "עדכוני מערכת", "בדיקת עדכונים והתקנה מתוך GitHub")}
+        <p id="updateStatusText">לא בוצעה בדיקת עדכונים.</p>
+        <div class="inline-actions">
+          <button id="checkUpdatesBtn" type="button" class="btn btn-muted"><i data-lucide="refresh-cw"></i><span>בדוק עדכונים</span></button>
+          <button id="runUpdateBtn" type="button" class="btn btn-primary"><i data-lucide="download-cloud"></i><span>התקן עדכון עכשיו</span></button>
+        </div>
+      </article>
     </section>
   `;
 }
@@ -1163,9 +1176,37 @@ function bindAdvanced() {
   $("#stopPrintingBtn")?.addEventListener("click", stopPrinting);
   $("#enableStartupBtn")?.addEventListener("click", async () => action("מפעיל עלייה עם Windows...", "/api/startup/enable", "הפעלה אוטומטית הופעלה."));
   $("#disableStartupBtn")?.addEventListener("click", async () => action("מבטל עלייה עם Windows...", "/api/startup/disable", "הפעלה אוטומטית בוטלה."));
+  $("#checkUpdatesBtn")?.addEventListener("click", checkUpdates);
+  $("#runUpdateBtn")?.addEventListener("click", runUpdate);
   api("/api/startup").then((result) => {
     $("#startupText").textContent = result.enabled ? "המערכת תעלה אוטומטית עם Windows" : "הפעלה אוטומטית כבויה";
   }).catch(() => {});
+}
+
+async function checkUpdates() {
+  setLoading(true, "בודק עדכונים...");
+  try {
+    const result = await api("/api/updates/check");
+    $("#updateStatusText").textContent = `${result.message} גרסה נוכחית: ${result.current}. גרסה ב-GitHub: ${result.latest}.`;
+    notify(result.available ? "warning" : "success", result.message);
+  } catch (error) {
+    notify("error", error.message || "בדיקת העדכונים נכשלה.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function runUpdate() {
+  setLoading(true, "מתקין עדכון...");
+  try {
+    const result = await api("/api/updates/run", { method: "POST" });
+    notify("success", result.message || "העדכון הסתיים.");
+    $("#updateStatusText").textContent = result.message || "העדכון הסתיים.";
+  } catch (error) {
+    notify("error", error.message || "העדכון נכשל.");
+  } finally {
+    setLoading(false);
+  }
 }
 
 function renderAbout() {

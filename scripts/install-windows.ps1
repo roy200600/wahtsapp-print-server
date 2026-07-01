@@ -48,7 +48,15 @@ function Initialize-NodeRuntime($ProjectRoot) {
   }
 
   $ZipUrl = "https://nodejs.org/dist/$($Version.version)/node-$($Version.version)-win-x64.zip"
-  Invoke-WebRequest -Uri $ZipUrl -OutFile $NodeZip
+  try {
+    Invoke-WebRequest -Uri $ZipUrl -OutFile $NodeZip
+  } catch {
+    $FallbackVersion = "v22.13.1"
+    $FallbackUrl = "https://nodejs.org/dist/$FallbackVersion/node-$FallbackVersion-win-x64.zip"
+    Write-Host "Primary Node.js download failed: $ZipUrl"
+    Write-Host "Trying fallback Node.js runtime: $FallbackUrl"
+    Invoke-WebRequest -Uri $FallbackUrl -OutFile $NodeZip
+  }
   Expand-Archive -Path $NodeZip -DestinationPath $ExtractRoot -Force
 
   $ExtractedNode = Get-ChildItem $ExtractRoot -Directory | Where-Object { $_.Name -like "node-*-win-x64" } | Select-Object -First 1
