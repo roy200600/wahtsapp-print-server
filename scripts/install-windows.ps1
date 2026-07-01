@@ -114,6 +114,8 @@ if ($UseCurrentFolder) {
 Set-Location -LiteralPath $ProjectRoot
 
 Initialize-NodeRuntime $ProjectRoot
+$NodeDir = Split-Path -Parent $script:NodeExe
+$env:Path = "$NodeDir;$env:Path"
 
 foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "logs", "temp", "tools", "runtime")) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null

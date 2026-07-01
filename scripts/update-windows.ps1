@@ -69,7 +69,10 @@ Get-ChildItem $Source.FullName -Force | ForEach-Object {
 }
 
 Set-Location -LiteralPath $ProjectRoot
+$NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
+$NodeDir = Split-Path -Parent $NodeExe
+$env:Path = "$NodeDir;$env:Path"
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {

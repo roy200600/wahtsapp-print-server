@@ -37,6 +37,8 @@ function Get-NpmCmd() {
 
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
+$NodeDir = Split-Path -Parent $NodeExe
+$env:Path = "$NodeDir;$env:Path"
 
 if (-not (Test-Path "node_modules")) {
   Write-Host "Installing dependencies..."
