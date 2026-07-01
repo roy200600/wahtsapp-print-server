@@ -136,6 +136,11 @@ function New-AppShortcut($ProjectRoot, $ShortcutPath) {
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
   $Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`" -Hidden -OpenBrowser"
+  $ShortcutDir = Split-Path -Parent $ShortcutPath
+
+  if (-not [string]::IsNullOrWhiteSpace($ShortcutDir)) {
+    New-Item -ItemType Directory -Force -Path $ShortcutDir | Out-Null
+  }
 
   $Shell = New-Object -ComObject WScript.Shell
   $Shortcut = $Shell.CreateShortcut($ShortcutPath)
@@ -144,6 +149,38 @@ function New-AppShortcut($ProjectRoot, $ShortcutPath) {
   $Shortcut.WorkingDirectory = [string]$ProjectRoot
   $Shortcut.WindowStyle = 7
   $Shortcut.Save()
+}
+
+function Get-DesktopFolders {
+  $Candidates = @(
+    [Environment]::GetFolderPath("DesktopDirectory"),
+    [Environment]::GetFolderPath("Desktop"),
+    (Join-Path $env:USERPROFILE "Desktop"),
+    (Join-Path $env:PUBLIC "Desktop")
+  )
+
+  $Candidates |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
+}
+
+function New-DesktopShortcut($ProjectRoot) {
+  $ShortcutName = "MY-PC WhatsApp Print Server.lnk"
+  $LastError = $null
+
+  foreach ($DesktopDir in Get-DesktopFolders) {
+    try {
+      $DesktopShortcut = Join-Path $DesktopDir $ShortcutName
+      New-AppShortcut $ProjectRoot $DesktopShortcut
+      Write-Host "Desktop shortcut created: $DesktopShortcut"
+      return
+    } catch {
+      $LastError = $_.Exception.Message
+      Write-Warning "Could not create desktop shortcut in $DesktopDir. Trying another desktop folder..."
+    }
+  }
+
+  Write-Warning "Desktop shortcut was not created. Installation will continue. Last error: $LastError"
 }
 
 $CurrentRoot = ""
@@ -216,16 +253,18 @@ if (Test-Path "package-lock.json") {
 Write-Host "Building project..."
 Invoke-Checked $script:NpmCmd @("run", "build")
 
-$DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "מערכת הדפסת WhatsApp - MY-PC.lnk"
-New-AppShortcut $ProjectRoot $DesktopShortcut
-Write-Host "Desktop shortcut created: $DesktopShortcut"
+New-DesktopShortcut $ProjectRoot
 
 if ($EnableStartup -and -not $NoStartup) {
   $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
   New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
   $ShortcutPath = Join-Path $StartupDir "MY-PC WhatsApp Print Server.lnk"
-  New-AppShortcut $ProjectRoot $ShortcutPath
-  Write-Host "Startup shortcut created: $ShortcutPath"
+  try {
+    New-AppShortcut $ProjectRoot $ShortcutPath
+    Write-Host "Startup shortcut created: $ShortcutPath"
+  } catch {
+    Write-Warning "Startup shortcut was not created. Installation will continue. Error: $($_.Exception.Message)"
+  }
 } else {
   $StartupShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\MY-PC WhatsApp Print Server.lnk"
   if (Test-Path $StartupShortcutPath) {
