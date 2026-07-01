@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { appPaths, rootDir } from "./paths.js";
 
@@ -123,15 +123,22 @@ export async function runUpdate(): Promise<{ started: boolean; message: string }
   }
 
   const powershellPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-  await execFileAsync(powershellPath, [
+  const child = spawn(powershellPath, [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
+    "-WindowStyle",
+    "Hidden",
     "-File",
     scriptPath
-  ]);
+  ], {
+    detached: true,
+    windowsHide: true,
+    stdio: "ignore"
+  });
+  child.unref();
 
-  return { started: true, message: "העדכון הסתיים. אם הדפדפן נשאר פתוח, רענן את הדף." };
+  return { started: true, message: "העדכון הופעל ברקע. המתן כדקה ואז רענן את הדף." };
 }
 
 function getStartupShortcutPath(): string {

@@ -15,7 +15,7 @@ export async function listWindowsPrinters(): Promise<string[]> {
     "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json"
   ], { encoding: "utf8" });
 
-  const parsed = JSON.parse(stdout || "[]");
+  const parsed = JSON.parse(stdout.trim() || "[]");
   return (Array.isArray(parsed) ? parsed : [parsed]).map((name) => String(name).trim()).filter(Boolean);
 }
 

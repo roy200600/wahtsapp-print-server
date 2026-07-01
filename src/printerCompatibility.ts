@@ -197,7 +197,7 @@ $printers | ConvertTo-Json -Depth 5
     encoding: "utf8",
     maxBuffer: 1024 * 1024 * 4
   });
-  const parsed = JSON.parse(stdout || "[]");
+  const parsed = JSON.parse(stdout.trim() || "[]");
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
