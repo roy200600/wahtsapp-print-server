@@ -3,6 +3,7 @@ dist/
 runtime/
 Generator/
 release/
+.codex/
 
 # Runtime state - do not commit customer data, WhatsApp sessions, logs, or jobs.
 auth/*
