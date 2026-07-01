@@ -90,7 +90,18 @@ if (-not $NoStartup) {
 }
 
 if (-not $NoStart) {
-  & ".\scripts\start-windows.ps1" -Hidden
+  $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
+  $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  Start-Process -FilePath $PowerShellPath -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    $StartScript,
+    "-Hidden"
+  ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden
 }
 
 Write-Host ""
