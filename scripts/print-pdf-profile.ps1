@@ -39,6 +39,14 @@ if (-not (Test-Path -LiteralPath $FilePath)) {
   throw "PDF file not found: $FilePath"
 }
 
+if (-not [System.IO.Path]::IsPathRooted($SumatraPath)) {
+  $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $CandidateSumatraPath = Join-Path $ProjectRoot $SumatraPath
+  if (Test-Path -LiteralPath $CandidateSumatraPath) {
+    $SumatraPath = $CandidateSumatraPath
+  }
+}
+
 $printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
 if (-not $printer) {
   throw "Printer not found: $PrinterName"
@@ -436,17 +444,10 @@ function Send-WithSumatra {
 
   $settings = ($sumatraSettings | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
 
-  $process = Start-Process -FilePath $SumatraPath -ArgumentList @(
-    "-silent",
-    "-print-to",
-    $PrinterName,
-    "-print-settings",
-    $settings,
-    $FilePath
-  ) -WindowStyle Hidden -Wait -PassThru
+  & $SumatraPath "-silent" "-print-to" $PrinterName "-print-settings" $settings $FilePath
 
-  if ($process.ExitCode -ne 0) {
-    throw "SumatraPDF print failed with exit code $($process.ExitCode)"
+  if ($LASTEXITCODE -ne 0) {
+    throw "SumatraPDF print failed with exit code $LASTEXITCODE"
   }
 }
 
@@ -457,8 +458,14 @@ if ($CompatibilityMode -eq "true") {
     Send-WithGhostscriptRenderedImages
     exit 0
   } catch {
-    Write-Warning "Ghostscript compatibility render/print failed: $($_.Exception.Message)"
-    throw
+    $ghostscriptError = $_.Exception.Message
+    Write-Warning "Ghostscript compatibility render/print failed, trying SumatraPDF: $ghostscriptError"
+    try {
+      Send-WithSumatra
+      exit 0
+    } catch {
+      throw "PDF print failed. Ghostscript: $ghostscriptError. SumatraPDF: $($_.Exception.Message)"
+    }
   }
 }
 

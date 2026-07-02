@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.14").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.15").catch(() => {});
   });
 }
 

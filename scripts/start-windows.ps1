@@ -72,6 +72,29 @@ function Get-NpmCmd() {
   throw "npm was not found. Run scripts\install-windows.ps1 first."
 }
 
+function Get-ConfiguredPort() {
+  $SettingsPath = Join-Path $ProjectRoot "config\settings.json"
+  if (Test-Path $SettingsPath) {
+    try {
+      $Settings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
+      if ($Settings.port) {
+        return [int]$Settings.port
+      }
+    } catch {}
+  }
+
+  return 3010
+}
+
+function Test-ServerRunning($Port) {
+  try {
+    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status" -TimeoutSec 2 | Out-Null
+    return $true
+  } catch {
+    return $false
+  }
+}
+
 function Initialize-SumatraPdf($ProjectRoot) {
   $SumatraDir = Join-Path $ProjectRoot "tools\SumatraPDF"
   $SumatraExe = Join-Path $SumatraDir "SumatraPDF.exe"
@@ -100,6 +123,15 @@ function Initialize-SumatraPdf($ProjectRoot) {
 }
 
 Initialize-UnicodeConsole
+
+$ConfiguredPort = Get-ConfiguredPort
+if (Test-ServerRunning $ConfiguredPort) {
+  Write-Host "MY-PC WhatsApp Print Server is already running: http://localhost:$ConfiguredPort"
+  if ($OpenBrowser) {
+    Start-Process "http://localhost:$ConfiguredPort"
+  }
+  return
+}
 
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd

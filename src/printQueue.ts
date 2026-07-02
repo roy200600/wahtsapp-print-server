@@ -8,8 +8,9 @@ export async function stopPrintQueue(printerName: string): Promise<{ stopped: nu
     throw new Error("No printer selected");
   }
 
+  const encodedPrinterName = Buffer.from(printerName, "utf8").toString("base64");
   const command = [
-    "$printerName = $args[0]",
+    `$printerName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPrinterName}'))`,
     "$jobs = Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue",
     "$count = 0",
     "foreach ($job in $jobs) {",
@@ -26,9 +27,8 @@ export async function stopPrintQueue(printerName: string): Promise<{ stopped: nu
     "-ExecutionPolicy",
     "Bypass",
     "-Command",
-    command,
-    printerName
-  ]);
+    command
+  ], { encoding: "utf8" });
 
   return { stopped: Number(stdout.trim()) || 0, printerName };
 }

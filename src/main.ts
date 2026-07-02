@@ -18,9 +18,20 @@ const app = createAdminServer(whatsapp, (config) => {
   runtimeConfig = config;
 });
 
-app.listen(runtimeConfig.port, () => {
+const server = app.listen(runtimeConfig.port, () => {
   logger.info({ port: runtimeConfig.port }, "Admin server started");
   console.log(`WhatsApp Print Server running: http://localhost:${runtimeConfig.port}`);
+});
+
+server.on("error", (error) => {
+  const listenError = error as NodeJS.ErrnoException;
+  if (listenError.code === "EADDRINUSE") {
+    logger.warn({ port: runtimeConfig.port }, "Admin server is already running or the port is in use");
+    console.log(`WhatsApp Print Server is already running or port ${runtimeConfig.port} is in use.`);
+    process.exit(0);
+  }
+
+  throw error;
 });
 
 void recoverStartupState().finally(() => {
