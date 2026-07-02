@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.5").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.7").catch(() => {});
   });
 }
 
@@ -576,7 +576,7 @@ function bindPage() {
   });
 }
 
-function renderDashboard() {
+function renderDashboardLegacy() {
   const stats = getStats();
   const whatsapp = state.status?.whatsapp || {};
   const printer = state.printers.find((item) => item.name === state.config.printerName);
@@ -660,6 +660,191 @@ function metricCard(icon, title, value, caption) {
 function bar(label, value, total, tone) {
   const percent = total ? Math.round((value / total) * 100) : 0;
   return `<div class="bar-row"><span>${label}</span><div><b class="${tone}" style="width:${percent}%"></b></div><strong>${percent}%</strong></div>`;
+}
+
+function renderDashboard() {
+  const stats = getStats();
+  const whatsapp = state.status?.whatsapp || {};
+  const config = state.config || {};
+  const printer = state.printers.find((item) => item.name === config.printerName);
+  const activeJobs = state.jobs.filter((job) => ["received", "printing"].includes(job.status));
+  const recoveryJobs = getRecoveryJobs();
+  const issueJobs = state.jobs.filter((job) => ["failed", "rejected"].includes(job.status)).slice(0, 5);
+  const license = state.license || {};
+  const connectedText = state.connectedSince ? state.connectedSince.toLocaleTimeString("he-IL") : "לא מחובר";
+  const updateText = state.updateInfo?.available ? `זמין ${escapeHtml(state.updateInfo.latest)}` : "מעודכן";
+
+  return `
+    <section class="ops-dashboard fade-in">
+      ${renderTrialNotice()}
+      ${renderUpdateNotice()}
+
+      <section class="panel ops-command-center">
+        <div class="ops-heading">
+          <p class="eyebrow">MY-PC WhatsApp Print Server</p>
+          <h2>לוח בקרה תפעולי</h2>
+          <p>תור הדפסות, מצב WhatsApp, מדפסות, רישוי ותקלות במסך אחד ברור.</p>
+        </div>
+        <div class="ops-status-grid">
+          ${opsStatusCard("message-circle", "WhatsApp", whatsapp.connected ? "מחובר" : "מנותק", whatsapp.connected ? "success" : "warning", whatsapp.connected ? `מחובר מ־${connectedText}` : whatsapp.lastError || "ממתין לחיבור")}
+          ${opsStatusCard("printer", "מדפסת פעילה", printer?.available ? "זמינה" : "דורשת בדיקה", printer?.available ? "success" : "warning", config.printerName || "לא נבחרה מדפסת")}
+          ${opsStatusCard("badge-check", "רישוי", license.mode === "licensed" ? "פעיל" : license.mode === "trial" ? "Trial" : "נעול", license.canRun ? "success" : "error", license.mode === "trial" ? `${license.trialDaysLeft || 0} ימים נותרו` : license.reason || "מערכת מורשית")}
+          ${opsStatusCard("download-cloud", "עדכונים", updateText, state.updateInfo?.available ? "warning" : "success", state.updateInfo?.available ? "מומלץ לעדכן מהדשבורד" : "המערכת בגרסה האחרונה")}
+        </div>
+      </section>
+
+      <section class="ops-kpi-grid">
+        ${opsMetric("calendar-days", "הדפסות היום", stats.todayTotal, "עבודות שנקלטו היום", "info")}
+        ${opsMetric("hourglass", "ממתינות", stats.received, "ממתינות לאישור או טיפול", "warning")}
+        ${opsMetric("loader-circle", "בתהליך", stats.printing, "נשלחות כעת למדפסת", "info")}
+        ${opsMetric("check-circle-2", "הושלמו", stats.printed, `${stats.successRate}% הצלחה`, "success")}
+        ${opsMetric("triangle-alert", "נכשלו", stats.failed, "דורשות בדיקה", "error")}
+        ${opsMetric("users", "לקוחות", stats.customers, "שולחים ייחודיים", "info")}
+      </section>
+
+      <section class="ops-main-grid">
+        <article class="panel ops-queue-panel">
+          <div class="ops-panel-header">
+            <div>
+              <h3>תור הדפסות ועבודות אחרונות</h3>
+              <p>${activeJobs.length ? `${activeJobs.length} עבודות פעילות כרגע` : "אין עבודות פעילות כרגע"}</p>
+            </div>
+            <div class="ops-toolbar">
+              <button class="btn btn-muted" data-refresh><i data-lucide="refresh-cw"></i><span>רענן</span></button>
+              <button id="stopPrintingBtn" class="btn btn-danger-outline"><i data-lucide="octagon-x"></i><span>עצור הדפסה</span></button>
+            </div>
+          </div>
+          ${operationsJobsTable(state.jobs.slice(0, 10))}
+        </article>
+
+        <aside class="ops-side-stack">
+          <article class="panel ops-connect-panel">
+            <div class="ops-panel-header compact">
+              <div>
+                <h3>חיבור WhatsApp</h3>
+                <p>${whatsapp.connected ? "המערכת מקבלת הודעות" : "נדרש חיבור או QR"}</p>
+              </div>
+              ${statusPill(whatsapp.connected ? "success" : "warning", whatsapp.connected ? "פעיל" : "לא מחובר")}
+            </div>
+            <div class="ops-qr-box">${whatsapp.qrDataUrl ? `<img src="${whatsapp.qrDataUrl}" alt="QR" />` : `<i data-lucide="${whatsapp.connected ? "check-circle-2" : "qr-code"}"></i><strong>${whatsapp.connected ? "מחובר" : "אין QR פעיל"}</strong><span>${whatsapp.connected ? `שעת חיבור: ${connectedText}` : "לחץ חבר WhatsApp או QR חדש"}</span>`}</div>
+          </article>
+
+          <article class="panel ops-printer-panel">
+            <div class="ops-panel-header compact">
+              <div>
+                <h3>בריאות מדפסת</h3>
+                <p>${escapeHtml(config.printerName || "לא נבחרה מדפסת")}</p>
+              </div>
+              ${statusPill(printer?.available ? "success" : "warning", printer?.available ? "תקינה" : "בדיקה")}
+            </div>
+            <div class="ops-detail-list">
+              ${opsDetail("יצרן", printer?.manufacturer || "לא ידוע")}
+              ${opsDetail("חיבור", printer?.connectionType || "-")}
+              ${opsDetail("תור Windows", printer ? `${printer.queueCount || 0} עבודות` : "-")}
+              ${opsDetail("שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
+              ${opsDetail("צבעוני", capability(printer?.capabilities?.color))}
+              ${opsDetail("דו צדדי", capability(printer?.capabilities?.duplex))}
+            </div>
+          </article>
+
+          <article class="panel ops-recovery-panel">
+            <div class="ops-panel-header compact">
+              <div>
+                <h3>התאוששות לאחר כיבוי</h3>
+                <p>${recoveryJobs.length ? "נמצאו עבודות ששוחזרו לאחר כיבוי" : "אין עבודות יתומות פעילות"}</p>
+              </div>
+              ${statusPill(recoveryJobs.length ? "warning" : "success", recoveryJobs.length ? "טופל" : "תקין")}
+            </div>
+            <div class="ops-recovery-box ${recoveryJobs.length ? "warning" : "success"}">
+              <i data-lucide="${recoveryJobs.length ? "shield-alert" : "shield-check"}"></i>
+              <div>
+                <strong>${recoveryJobs.length ? `${recoveryJobs.length} עבודות נסגרו בבטחה` : "התור נקי"}</strong>
+                <span>${recoveryJobs.length ? "המערכת סימנה אותן ככשל כדי לא לתקוע עבודות חדשות." : "המערכת מוכנה לקבל הדפסות חדשות."}</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel ops-alerts-panel">
+            <div class="ops-panel-header compact">
+              <div>
+                <h3>תקלות אחרונות</h3>
+                <p>${issueJobs.length ? "פריטים שדורשים תשומת לב" : "אין תקלות פתוחות"}</p>
+              </div>
+              <button class="icon-btn" data-page-jump="logs"><i data-lucide="list-checks"></i></button>
+            </div>
+            <div class="ops-alert-list">
+              ${issueJobs.map((job) => `
+                <div>
+                  <strong>${escapeHtml(job.file_name || "קובץ")}</strong>
+                  <span>${escapeHtml(job.failure_reason || "כשל לא ידוע")}</span>
+                </div>
+              `).join("") || `<div class="ops-empty-line">המערכת פועלת ללא תקלות פעילות.</div>`}
+            </div>
+          </article>
+        </aside>
+      </section>
+    </section>
+  `;
+}
+
+function opsStatusCard(icon, label, value, tone, detail) {
+  return `
+    <div class="ops-status-card ${tone}">
+      <i data-lucide="${icon}"></i>
+      <div>
+        <span>${label}</span>
+        <strong>${value}</strong>
+        <small>${escapeHtml(detail || "")}</small>
+      </div>
+    </div>
+  `;
+}
+
+function opsMetric(icon, label, value, caption, tone) {
+  return `
+    <article class="ops-kpi-card ${tone}">
+      <i data-lucide="${icon}"></i>
+      <span>${label}</span>
+      <strong>${value}</strong>
+      <small>${caption}</small>
+    </article>
+  `;
+}
+
+function operationsJobsTable(jobs) {
+  return `
+    <div class="table-wrap ops-table-wrap">
+      <table class="ops-jobs-table">
+        <thead><tr><th>סטטוס</th><th>קובץ</th><th>שולח</th><th>סוג</th><th>גודל</th><th>מדפסת</th><th>זמן</th><th>פעולה</th></tr></thead>
+        <tbody>${jobs.map((job) => `
+          <tr>
+            <td>${jobStatus(job.status)}</td>
+            <td class="ops-file-cell" title="${escapeHtml(job.failure_reason || "")}"><strong>${escapeHtml(job.file_name || "")}</strong><small>${escapeHtml(job.failure_reason || "")}</small></td>
+            <td><strong>${escapeHtml(job.sender_name || "")}</strong><small>${escapeHtml(job.sender_phone || "")}</small></td>
+            <td>${escapeHtml(job.file_type || "")}</td>
+            <td>${formatSize(job.size_bytes)}</td>
+            <td>${escapeHtml(job.printer_name || "")}</td>
+            <td>${formatDate(job.created_at)}</td>
+            <td>${jobActionLabel(job)}</td>
+          </tr>`).join("") || `<tr><td colspan="8">${emptyState("אין עבודות להצגה")}</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function jobActionLabel(job) {
+  if (job.status === "printing") return `<span class="ops-action active">בתהליך</span>`;
+  if (job.status === "received") return `<span class="ops-action waiting">ממתין</span>`;
+  if (["failed", "rejected"].includes(job.status)) return `<span class="ops-action failed">בדוק</span>`;
+  return `<span class="ops-action done">הושלם</span>`;
+}
+
+function opsDetail(label, value) {
+  return `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function getRecoveryJobs() {
+  return state.jobs.filter((job) => String(job.failure_reason || "").toLowerCase().includes("startup recovery"));
 }
 
 function renderSettings() {
@@ -1594,10 +1779,14 @@ async function runOfficeTest(type) {
 
 function getStats() {
   const total = state.jobs.length;
+  const todayTotal = state.jobs.filter((job) => isToday(job.created_at)).length;
   const printed = state.jobs.filter((job) => job.status === "printed").length;
   const failed = state.jobs.filter((job) => ["failed", "rejected"].includes(job.status)).length;
-  const waiting = Math.max(0, total - printed - failed);
-  return { total, printed, failed, waiting, successRate: total ? Math.round((printed / total) * 100) : 0 };
+  const printing = state.jobs.filter((job) => job.status === "printing").length;
+  const received = state.jobs.filter((job) => job.status === "received").length;
+  const waiting = received + printing;
+  const customers = uniqueSenders().length;
+  return { total, todayTotal, printed, failed, printing, received, waiting, customers, successRate: total ? Math.round((printed / total) * 100) : 0 };
 }
 
 function jobsTable(jobs) {
@@ -1621,8 +1810,8 @@ function jobsTable(jobs) {
 }
 
 function jobStatus(status) {
-  const normalized = status === "printed" ? "printed" : ["failed", "rejected"].includes(status) ? "failed" : "waiting";
-  const text = normalized === "printed" ? "הודפס" : normalized === "failed" ? "נכשל" : "ממתין";
+  const normalized = status === "printed" ? "printed" : status === "printing" ? "printing" : ["failed", "rejected"].includes(status) ? "failed" : "waiting";
+  const text = normalized === "printed" ? "הודפס" : normalized === "printing" ? "בתהליך" : normalized === "failed" ? "נכשל" : "ממתין";
   return `<span class="job-status ${normalized}">${text}</span>`;
 }
 
@@ -1727,6 +1916,13 @@ function formatSize(bytes) {
 function formatDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleString("he-IL");
+}
+
+function isToday(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  const today = new Date();
+  return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
 }
 
 function escapeHtml(value) {
