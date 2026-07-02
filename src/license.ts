@@ -23,8 +23,13 @@ export interface LicensePayload {
   version: 1;
   licenseId: string;
   customerName: string;
+  businessName?: string;
+  contactName?: string;
   customerPhone: string;
   customerEmail: string;
+  customerAddress?: string;
+  planId?: string;
+  planLabel?: string;
   machineId: string;
   issuedAt: string;
   expiresAt: string;

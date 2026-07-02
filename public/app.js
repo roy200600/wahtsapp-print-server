@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.7").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.8").catch(() => {});
   });
 }
 
@@ -1446,6 +1446,7 @@ function renderLicense() {
         : "הרישיון אינו תקין";
   const statusType = license.canRun ? "success" : "error";
   const requestText = buildLicenseRequestText(registration, license);
+  const requestJson = buildLicenseRequestJson(registration, license);
 
   return `
     <section class="two-column fade-in">
@@ -1479,30 +1480,24 @@ function renderLicense() {
           ], registration.plan || ""))}
         </div>
         <label class="field full"><span>בקשת רישיון</span><textarea id="licenseRequestText" rows="8">${escapeHtml(requestText)}</textarea></label>
+        <label class="field full"><span>license-request.json</span><textarea id="licenseRequestJson" class="license-json-preview" rows="8" readonly>${escapeHtml(JSON.stringify(requestJson, null, 2))}</textarea></label>
         <div class="inline-actions">
           <button id="copyMachineCodeBtn" type="button" class="btn btn-muted"><i data-lucide="copy"></i><span>העתק קוד מחשב</span></button>
           <button id="copyLicenseRequestBtn" type="button" class="btn btn-primary"><i data-lucide="clipboard"></i><span>העתק בקשת רישיון</span></button>
+          <button id="downloadLicenseRequestBtn" type="button" class="btn btn-muted"><i data-lucide="download"></i><span>הורד JSON</span></button>
+          <button id="copyLicenseRequestJsonBtn" type="button" class="btn btn-muted"><i data-lucide="braces"></i><span>העתק JSON</span></button>
           <button id="sendLicenseWhatsappBtn" type="button" class="btn btn-success"><i data-lucide="message-circle"></i><span>שלח ל-MY-PC ב-WhatsApp</span></button>
         </div>
       </article>
       <article class="panel wide">
-        ${sectionTitle("badge-check", "הפעלת רישיון", "הדבק כאן את תוכן license.json שקיבלת מ-MY-PC")}
+        ${sectionTitle("badge-check", "הפעלת רישיון", "בחר או הדבק כאן את license.json שקיבלת מ-MY-PC")}
+        <div class="license-file-row">
+          <label class="field full"><span>טעינת קובץ license.json</span><input id="licenseFileInput" type="file" accept=".json,application/json" /></label>
+        </div>
         <label class="field full"><span>license.json</span><textarea id="licenseInput" rows="10" placeholder='{"payload":...,"signature":"..."}'></textarea></label>
         <div class="inline-actions">
           <button id="activateLicenseBtn" type="button" class="btn btn-success"><i data-lucide="shield-check"></i><span>הפעל רישיון</span></button>
         </div>
-      </article>
-      <article class="panel wide about-hero">
-        <img class="brand-logo about-logo" src="/assets/my-pc-logo-white.png" alt="MY-PC" />
-        <h2>המחשב שלי - מחברים אותך לעולם הטכנולוגי</h2>
-        <p>שרת הדפסה אוטומטי דרך WhatsApp, פותח ומתוחזק על ידי MY-PC.</p>
-        <div class="about-grid">
-          <span>גרסת מערכת</span><strong>${escapeHtml(state.status?.version || "1.0.2")}</strong>
-          <span>טלפון</span><strong>052-225-0223</strong>
-          <span>אימייל</span><a href="mailto:office@my-pc.co.il">office@my-pc.co.il</a>
-          <span>אתר</span><a href="https://my-pc.co.il" target="_blank" rel="noreferrer">my-pc.co.il</a>
-        </div>
-        <p class="legal-note">כל הזכויות שמורות ל-MY-PC. המערכת עושה שימוש בכלים בקוד פתוח, אך האפיון, האינטגרציה, החיבור והאריזה למערכת אחת הם יצירה של MY-PC.</p>
       </article>
     </section>
   `;
@@ -1520,6 +1515,7 @@ function bindLicense() {
     const registration = { businessName, contactName, phone, email, address, plan };
     state.registration = registration;
     $("#licenseRequestText").value = buildLicenseRequestText(registration, license);
+    $("#licenseRequestJson").value = JSON.stringify(buildLicenseRequestJson(registration, license), null, 2);
   };
 
   ["licenseBusinessName", "licenseContactName", "licenseCustomerPhone", "licenseCustomerEmail", "licenseBusinessAddress", "licensePlan"].forEach((name) => {
@@ -1538,9 +1534,37 @@ function bindLicense() {
     notify("success", "בקשת הרישיון הועתקה.");
   });
 
+  $("#copyLicenseRequestJsonBtn")?.addEventListener("click", async () => {
+    await saveRegistrationFromLicenseForm();
+    const requestJson = buildLicenseRequestJson(state.registration, state.license);
+    const text = JSON.stringify(requestJson, null, 2);
+    $("#licenseRequestJson").value = text;
+    await navigator.clipboard.writeText(text);
+    notify("success", "קובץ בקשת הרישוי הועתק כ-JSON.");
+  });
+
+  $("#downloadLicenseRequestBtn")?.addEventListener("click", async () => {
+    await saveRegistrationFromLicenseForm();
+    const requestJson = buildLicenseRequestJson(state.registration, state.license);
+    $("#licenseRequestJson").value = JSON.stringify(requestJson, null, 2);
+    downloadJsonFile(requestJson, `${safeFileName(state.registration?.businessName || "license-request")}-license-request.json`);
+    notify("success", "קובץ בקשת הרישוי הורד.");
+  });
+
   $("#sendLicenseWhatsappBtn")?.addEventListener("click", async () => {
     await saveRegistrationFromLicenseForm();
     window.open(`https://wa.me/972522250223?text=${encodeURIComponent($("#licenseRequestText").value)}`, "_blank", "noopener,noreferrer");
+  });
+
+  $("#licenseFileInput")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      $("#licenseInput").value = await readTextFile(file);
+      notify("success", "קובץ הרישיון נטען. לחץ הפעל רישיון.");
+    } catch (error) {
+      notify("error", error.message || "טעינת קובץ הרישיון נכשלה.");
+    }
   });
 
   $("#activateLicenseBtn")?.addEventListener("click", async () => {
@@ -1594,11 +1618,85 @@ function buildLicenseRequestText(registration, license) {
   ].join("\n");
 }
 
+function buildLicenseRequestJson(registration, license) {
+  const plan = registration?.plan || "";
+  return {
+    type: "my-pc-whatsapp-print-license-request",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    appVersion: state.status?.version || "",
+    business: {
+      businessName: registration?.businessName || "",
+      contactName: registration?.contactName || "",
+      phone: registration?.phone || "",
+      email: registration?.email || "",
+      address: registration?.address || ""
+    },
+    plan: {
+      id: plan,
+      label: planLabel(plan),
+      months: planMonths(plan),
+      days: planDays(plan)
+    },
+    machine: {
+      machineCode: license?.machineCode || "",
+      machineId: license?.machineId || ""
+    },
+    trial: {
+      startedAt: license?.trialStartedAt || "",
+      endsAt: license?.trialEndsAt || "",
+      daysLeft: license?.trialDaysLeft ?? 0
+    },
+    features: ["whatsapp-print", "pdf", "office", "multi-printer", "pricing", "system-alerts", "customer-messages"]
+  };
+}
+
 function planLabel(plan) {
   if (plan === "monthly") return "חודשי - 100 ש״ח לפני מע״מ";
   if (plan === "sixMonths") return "חצי שנה - 500 ש״ח לפני מע״מ";
   if (plan === "yearly") return "שנתי - 1000 ש״ח לפני מע״מ";
   return "לא נבחר";
+}
+
+function planMonths(plan) {
+  if (plan === "monthly") return 1;
+  if (plan === "sixMonths") return 6;
+  if (plan === "yearly") return 12;
+  return 12;
+}
+
+function planDays(plan) {
+  if (plan === "monthly") return 30;
+  if (plan === "sixMonths") return 182;
+  if (plan === "yearly") return 365;
+  return 365;
+}
+
+function downloadJsonFile(value, fileName) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("לא ניתן לקרוא את הקובץ."));
+    reader.readAsText(file, "utf-8");
+  });
+}
+
+function safeFileName(value) {
+  return String(value || "license-request")
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || "license-request";
 }
 
 function renderDiagnostics() {
