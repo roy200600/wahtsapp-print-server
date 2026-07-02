@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { appPaths } from "./paths.js";
 import { defaultConfig, defaultCustomerMarketing, defaultCustomerMessages, defaultPdfPrintProfile } from "./config.js";
@@ -15,6 +16,8 @@ const licenseStatePath = path.join(appPaths.configDir, "license-state.json");
 const trialUsagePath = path.join(appPaths.configDir, "trial-usage.json");
 const registrationPath = path.join(appPaths.configDir, "registration.json");
 const superAdminPasswordHash = "4ebba2f9c4d9a82128aa53b27f24c60dde9229c9a7cf6920b5aef2064794d1ae";
+const activationCodePrefix = "MYPC";
+const activationCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const publicKeyPem = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA8/BEXH9df1ss86ln9vDybVP6KLRV83uxv6+8oQvWjDg=
 -----END PUBLIC KEY-----`;
@@ -372,12 +375,69 @@ export function getTrialUsage(): TrialUsage {
 
 function parseLicenseInput(input: unknown): LicenseFile {
   if (typeof input === "string") {
-    return JSON.parse(input) as LicenseFile;
+    const text = input.trim();
+    if (!text) {
+      throw new Error("License input is empty.");
+    }
+
+    if (text.startsWith("{")) {
+      return JSON.parse(text) as LicenseFile;
+    }
+
+    return parseActivationCode(text);
   }
   if (typeof input === "object" && input) {
     return input as LicenseFile;
   }
   throw new Error("License input must be a JSON object or JSON text.");
+}
+
+function parseActivationCode(input: string): LicenseFile {
+  const normalized = input
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "")
+    .toUpperCase();
+
+  if (!normalized.startsWith(activationCodePrefix)) {
+    throw new Error("License input must be license.json or a MYPC activation code.");
+  }
+
+  const encoded = normalized.slice(activationCodePrefix.length);
+  if (!encoded) {
+    throw new Error("Activation code is empty.");
+  }
+
+  try {
+    const compressed = decodeBase32(encoded);
+    const json = zlib.inflateRawSync(compressed).toString("utf8");
+    return JSON.parse(json) as LicenseFile;
+  } catch (error) {
+    throw new Error(`Activation code is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function decodeBase32(value: string): Buffer {
+  let bits = 0;
+  let valueBuffer = 0;
+  const output: number[] = [];
+
+  for (const character of value.replace(/=+$/g, "")) {
+    const index = activationCodeAlphabet.indexOf(character);
+    if (index < 0) {
+      throw new Error(`Unsupported character "${character}".`);
+    }
+
+    valueBuffer = (valueBuffer << 5) | index;
+    bits += 5;
+
+    if (bits >= 8) {
+      output.push((valueBuffer >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+
+  return Buffer.from(output);
 }
 
 function validateLicense(license: LicenseFile, machineId: string): { valid: boolean; reason?: string } {

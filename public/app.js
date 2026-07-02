@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.9").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.10").catch(() => {});
   });
 }
 
@@ -1499,6 +1499,13 @@ function renderLicense() {
           <button id="activateLicenseBtn" type="button" class="btn btn-success"><i data-lucide="shield-check"></i><span>הפעל רישיון</span></button>
         </div>
       </article>
+      <article class="panel wide">
+        ${sectionTitle("key", "הפעלה באמצעות קוד", "הדבק כאן קוד רישוי שקיבלת מ-MY-PC במקום קובץ JSON")}
+        <label class="field full"><span>קוד רישוי</span><textarea id="licenseCodeInput" class="license-code-input" rows="6" placeholder="MYPC-XXXXX-XXXXX-XXXXX"></textarea></label>
+        <div class="inline-actions">
+          <button id="activateLicenseCodeBtn" type="button" class="btn btn-success"><i data-lucide="key-round"></i><span>הפעל באמצעות קוד</span></button>
+        </div>
+      </article>
     </section>
   `;
 }
@@ -1577,6 +1584,21 @@ function bindLicense() {
       notify("success", "הרישיון הופעל בהצלחה.");
     } catch (error) {
       notify("error", error.message || "הפעלת הרישיון נכשלה.");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  $("#activateLicenseCodeBtn")?.addEventListener("click", async () => {
+    setLoading(true, "מפעיל רישיון מקוד...");
+    try {
+      const licenseCode = $("#licenseCodeInput").value.trim();
+      state.license = await api("/api/license/activate", postJson({ license: licenseCode }));
+      await loadAll();
+      render();
+      notify("success", "הרישיון הופעל בהצלחה באמצעות קוד.");
+    } catch (error) {
+      notify("error", error.message || "הפעלת קוד הרישוי נכשלה.");
     } finally {
       setLoading(false);
     }

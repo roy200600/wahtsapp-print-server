@@ -444,6 +444,15 @@ a {
   font-size: 13px;
 }
 
+.license-code-input {
+  min-height: 110px;
+  direction: ltr;
+  text-align: left;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
 .license-file-row input[type="file"] {
   min-height: 48px;
   padding: 10px;

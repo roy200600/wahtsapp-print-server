@@ -25,6 +25,7 @@ logs/*
 # Local machine settings. Commit config/settings.example.json instead.
 config/settings.json
 config/license.json
+config/license.code.txt
 config/license-state.json
 config/trial-usage.json
 config/registration.json
