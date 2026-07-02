@@ -80,13 +80,15 @@ export class PrinterStatusChecker {
     const issues: string[] = [];
     if (!printer.driverValid) issues.push("printer-driver-invalid");
     if (!printer.available) issues.push("printer-not-available");
-    if (printer.queueErrors > 0) issues.push("queue-has-errors");
+    if (!printer.isFiery && printer.queueErrors > 0) issues.push("queue-has-errors");
 
     return {
       ok: issues.length === 0,
       message:
         issues.length === 0
-          ? "המדפסת זמינה ומוכנה לקבלת עבודות הדפסה."
+          ? printer.isFiery && printer.queueErrors > 0
+            ? "Fiery זוהה והמדפסת זמינה. קיימות אזהרות בתור Windows, אך הן לא חוסמות שליחת עבודות ל-Fiery."
+            : "המדפסת זמינה ומוכנה לקבלת עבודות הדפסה."
           : "המדפסת נמצאה, אבל קיימת בעיית זמינות או שגיאה בתור ההדפסה.",
       printer,
       issues
@@ -120,7 +122,7 @@ export class PrinterCompatibilityLayer {
     const controllerModel = detectFieryControllerModel(fingerprint);
     const manufacturer = detectManufacturer(fingerprint);
     const connectionType = detectConnectionType(portName, isNetwork, isShared, isVirtual, isFiery);
-    const available = driverValid && isAvailable(status, printerStatus, queueErrors);
+    const available = driverValid && isAvailable(status, printerStatus, isFiery ? 0 : queueErrors);
     const paperSizes = array(raw.PaperSizes);
     const capabilities = {
       color: PrinterCapabilities.value(raw.Color),
@@ -148,7 +150,7 @@ export class PrinterCompatibilityLayer {
       queueErrors,
       driverValid,
       capabilities,
-      compatibilityNote: compatibilityNote(available, capabilities, isFiery, controllerModel),
+      compatibilityNote: compatibilityNote(available, capabilities, isFiery, controllerModel, queueErrors),
       available
     };
   }
@@ -294,11 +296,18 @@ function isAvailable(status: string, printerStatus: string, queueErrors: number)
   return !/(offline|error|paper|jam|paused|blocked|intervention|not available)/i.test(value);
 }
 
-function compatibilityNote(available: boolean, capabilities: PrinterCompatibilityInfo["capabilities"], isFiery = false, controllerModel = ""): string {
+function compatibilityNote(
+  available: boolean,
+  capabilities: PrinterCompatibilityInfo["capabilities"],
+  isFiery = false,
+  controllerModel = "",
+  queueErrors = 0
+): string {
   if (!available) return "נמצאה מדפסת, אך היא אינה זמינה כרגע או שיש שגיאה בתור.";
   if (isFiery) {
     const model = controllerModel ? ` (${controllerModel})` : "";
-    return `Fiery/EFI${model} זוהה דרך Windows Driver. ההדפסה תישלח לתור ה-Fiery, ויכולות צבע/דו-צדדי ייקראו מהדרייבר כאשר הן זמינות.`;
+    const queueNote = queueErrors > 0 ? " Windows מדווח אזהרות בתור, אך ב-Fiery הן נחשבות לאזהרה בלבד ולא חוסמות הדפסה." : "";
+    return `Fiery/EFI${model} זוהה דרך Windows Driver. ההדפסה תישלח לתור ה-Fiery, ויכולות צבע/דו-צדדי ייקראו מהדרייבר כאשר הן זמינות.${queueNote}`;
   }
   const unknowns = Object.values(capabilities).filter((value) => value === "unknown").length;
   return unknowns ? "המדפסת זמינה. חלק מהיכולות לא דווחו על ידי הדרייבר." : "המדפסת זמינה ותואמת דרך Windows Driver.";

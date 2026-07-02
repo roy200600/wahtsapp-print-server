@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.11").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.12").catch(() => {});
   });
 }
 
@@ -742,7 +742,7 @@ function renderDashboard() {
               ${printer?.isFiery ? opsDetail("בקר Fiery", printer?.controllerModel || "Fiery / EFI") : ""}
               ${opsDetail("חיבור", printer?.connectionType || "-")}
               ${opsDetail("תור Windows", printer ? `${printer.queueCount || 0} עבודות` : "-")}
-              ${opsDetail("שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
+              ${opsDetail(printer?.isFiery ? "אזהרות תור Fiery" : "שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
               ${opsDetail("צבעוני", capability(printer?.capabilities?.color))}
               ${opsDetail("דו צדדי", capability(printer?.capabilities?.duplex))}
             </div>
