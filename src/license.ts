@@ -5,7 +5,13 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { appPaths } from "./paths.js";
-import { defaultConfig, defaultCustomerMarketing, defaultCustomerMessages, defaultPdfPrintProfile } from "./config.js";
+import {
+  defaultConfig,
+  defaultCustomerMarketing,
+  defaultCustomerMessages,
+  defaultFieryHotFolders,
+  defaultPdfPrintProfile
+} from "./config.js";
 import type { AppConfig, PrinterProfileConfig } from "./types.js";
 
 const trialDays = 14;
@@ -515,6 +521,7 @@ function normalizeTrialPrinterProfile(config: AppConfig): PrinterProfileConfig |
     role: "blackWhite",
     isPrimary: true,
     askCustomerColor: false,
+    fieryHotFolders: defaultFieryHotFolders,
     printProfile: {
       ...config.pdfPrintProfile,
       colorMode: "grayscale",

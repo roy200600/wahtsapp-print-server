@@ -1,6 +1,12 @@
 ﻿import fs from "node:fs";
 import { appPaths, settingsPath } from "./paths.js";
-import type { AppConfig, PdfPrintProfile, PrinterProfileConfig, PrinterProfileRole } from "./types.js";
+import type {
+  AppConfig,
+  FieryHotFolderConfig,
+  PdfPrintProfile,
+  PrinterProfileConfig,
+  PrinterProfileRole
+} from "./types.js";
 
 export const defaultPdfPrintProfile = {
   colorMode: "color",
@@ -61,6 +67,19 @@ export const defaultCustomerMarketing = {
   message: "",
   delayMinutes: 5
 } as const;
+
+export const defaultFieryHotFolders: FieryHotFolderConfig = {
+  enabled: false,
+  askManager: true,
+  folders: [
+    { id: "a4", label: "A4", paperSize: "A4", path: "", enabled: true },
+    { id: "a3", label: "A3", paperSize: "A3", path: "", enabled: true },
+    { id: "sra3", label: "SRA3", paperSize: "SRA3", path: "", enabled: true },
+    { id: "letter", label: "Letter", paperSize: "LETTER", path: "", enabled: true },
+    { id: "legal", label: "Legal", paperSize: "LEGAL", path: "", enabled: true },
+    { id: "custom", label: "Custom", paperSize: "CUSTOM", path: "", enabled: false }
+  ]
+};
 
 export const defaultConfig: AppConfig = {
   printerName: "",
@@ -233,6 +252,7 @@ function normalizePrinterProfiles(config: AppConfig): PrinterProfileConfig[] {
       role: "default",
       isPrimary: true,
       askCustomerColor: false,
+      fieryHotFolders: normalizeFieryHotFolders(undefined),
       printProfile: normalizePdfPrintProfile(config),
       officeProfile: normalizeOfficePrintProfile(config.officePrintProfile)
     }
@@ -251,11 +271,45 @@ function normalizePrinterProfile(
     role: pick(profile.role, ["default", "blackWhite", "color", "special"], index === 0 ? "default" : "special") as PrinterProfileRole,
     isPrimary: Boolean(profile.isPrimary),
     askCustomerColor: Boolean(profile.askCustomerColor),
+    fieryHotFolders: normalizeFieryHotFolders(profile.fieryHotFolders),
     printProfile: normalizePdfPrintProfile({
       ...config,
       pdfPrintProfile: profile.printProfile ?? config.pdfPrintProfile
     }),
     officeProfile: normalizeOfficePrintProfile(profile.officeProfile ?? config.officePrintProfile)
+  };
+}
+
+function normalizeFieryHotFolders(hotFolders: Partial<FieryHotFolderConfig> | undefined): FieryHotFolderConfig {
+  const sourceFolders = Array.isArray(hotFolders?.folders) ? hotFolders.folders : [];
+  const mergedFolders = defaultFieryHotFolders.folders.map((defaultFolder) => {
+    const source = sourceFolders.find((folder) => folder.id === defaultFolder.id || folder.paperSize === defaultFolder.paperSize);
+    return normalizeFieryHotFolder({ ...defaultFolder, ...(source ?? {}) });
+  });
+
+  for (const folder of sourceFolders) {
+    if (mergedFolders.some((existing) => existing.id === folder.id)) {
+      continue;
+    }
+    mergedFolders.push(normalizeFieryHotFolder(folder));
+  }
+
+  return {
+    enabled: Boolean(hotFolders?.enabled),
+    askManager: hotFolders?.askManager !== false,
+    folders: mergedFolders
+  };
+}
+
+function normalizeFieryHotFolder(folder: Partial<FieryHotFolderConfig["folders"][number]>) {
+  const paperSize = normalizePaperSize(folder.paperSize || folder.label || "CUSTOM");
+  const id = String(folder.id || paperSize.toLowerCase()).replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "custom";
+  return {
+    id,
+    label: String(folder.label || paperSize).trim() || paperSize,
+    paperSize,
+    path: String(folder.path || "").trim(),
+    enabled: folder.enabled !== false
   };
 }
 

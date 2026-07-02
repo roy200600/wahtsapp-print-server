@@ -4,12 +4,18 @@ import { promisify } from "node:util";
 import { rootDir } from "./paths.js";
 import type { AppConfig, IncomingAttachment } from "./types.js";
 import { assertPrinterAvailable } from "./printerCompatibility.js";
+import { copyAttachmentToFieryHotFolder } from "./fieryHotFolders.js";
 
 const execFileAsync = promisify(execFile);
 
 export async function printFile(attachment: IncomingAttachment, config: AppConfig): Promise<void> {
   if (!config.printerName.trim()) {
     throw new Error("No printer selected");
+  }
+
+  if (attachment.fieryHotFolderPath) {
+    await copyAttachmentToFieryHotFolder(attachment, attachment.fieryHotFolderPath);
+    return;
   }
 
   await assertPrinterAvailable(config.printerName);
