@@ -59,6 +59,7 @@ export async function printRegisteredAttachment(
   const config = applyLicenseLimits(getConfig());
   try {
     const startedAt = Date.now();
+    setPrintStatus(attachment.id, "printing", undefined, config.printerName);
     await printFile(attachment, config);
     const durationMs = Date.now() - startedAt;
     const printedPath = moveTo(attachment.filePath, appPaths.printedDir);

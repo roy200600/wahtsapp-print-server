@@ -1,4 +1,4 @@
-export type PrintStatus = "received" | "printed" | "failed" | "rejected";
+export type PrintStatus = "received" | "printing" | "printed" | "failed" | "rejected";
 
 export type PdfColorMode = "color" | "grayscale";
 export type PdfDuplexMode = "simplex" | "long-edge" | "short-edge";

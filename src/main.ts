@@ -6,6 +6,9 @@ import { logger } from "./logger.js";
 import { sendSystemAlert } from "./alerts.js";
 import { cleanupPrintedFilesOlderThan } from "./maintenance.js";
 import { getLicenseStatus } from "./license.js";
+import { appPaths } from "./paths.js";
+import { recoverInterruptedJobs } from "./db.js";
+import { stopPrintQueue } from "./printQueue.js";
 
 ensureDirectories();
 
@@ -20,15 +23,17 @@ app.listen(runtimeConfig.port, () => {
   console.log(`WhatsApp Print Server running: http://localhost:${runtimeConfig.port}`);
 });
 
-const licenseStatus = getLicenseStatus();
-if (licenseStatus.canRun) {
-  void whatsapp.start().catch((error) => {
-    logger.error({ error }, "WhatsApp failed to start");
-    sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
-  });
-} else {
-  logger.warn({ licenseStatus }, "WhatsApp auto-start blocked by license status");
-}
+void recoverStartupState().finally(() => {
+  const licenseStatus = getLicenseStatus();
+  if (licenseStatus.canRun) {
+    void whatsapp.start().catch((error) => {
+      logger.error({ error }, "WhatsApp failed to start");
+      sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
+    });
+  } else {
+    logger.warn({ licenseStatus }, "WhatsApp auto-start blocked by license status");
+  }
+});
 
 setInterval(() => {
   const status = getLicenseStatus();
@@ -56,3 +61,31 @@ process.on("unhandledRejection", (reason) => {
   logger.error({ reason }, "Unhandled rejection");
   sendSystemAlert("כל Error שלא נתפס (Unhandled Error)", message);
 });
+
+async function recoverStartupState(): Promise<void> {
+  const recovery = recoverInterruptedJobs(appPaths.failedDir, runtimeConfig.printerName);
+  if (recovery.recovered > 0 || recovery.errors.length > 0) {
+    logger.warn({ recovery }, "Recovered interrupted print jobs from previous run");
+  }
+
+  const printerNames = new Set<string>();
+  if (runtimeConfig.printerName.trim()) {
+    printerNames.add(runtimeConfig.printerName.trim());
+  }
+  for (const profile of runtimeConfig.printerProfiles || []) {
+    if (profile.printerName?.trim()) {
+      printerNames.add(profile.printerName.trim());
+    }
+  }
+
+  for (const printerName of printerNames) {
+    try {
+      const result = await stopPrintQueue(printerName);
+      if (result.stopped > 0) {
+        logger.warn({ result }, "Removed stale MY-PC print jobs from Windows spooler during startup");
+      }
+    } catch (error) {
+      logger.error({ error, printerName }, "Failed to clear startup print queue");
+    }
+  }
+}

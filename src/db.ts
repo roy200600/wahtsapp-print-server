@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { databasePath } from "./paths.js";
 import { ensureDirectories } from "./config.js";
 import { getPrintDuration } from "./printMetrics.js";
@@ -21,6 +22,17 @@ type StoredPrintJob = {
   status: PrintStatus;
   failure_reason?: string | null;
 };
+
+export interface InterruptedJobRecoveryResult {
+  recovered: number;
+  movedFiles: number;
+  errors: string[];
+  jobs: Array<{
+    id: string;
+    fileName: string;
+    previousStatus: PrintStatus;
+  }>;
+}
 
 ensureDirectories();
 
@@ -86,6 +98,56 @@ export function listRecentJobs(limit = 100): unknown[] {
     }));
 }
 
+export function recoverInterruptedJobs(failedDir: string, printerName = ""): InterruptedJobRecoveryResult {
+  const jobs = readJobs();
+  const result: InterruptedJobRecoveryResult = {
+    recovered: 0,
+    movedFiles: 0,
+    errors: [],
+    jobs: []
+  };
+
+  for (const job of jobs) {
+    if (!["received", "printing"].includes(job.status)) {
+      continue;
+    }
+
+    const previousStatus = job.status;
+    job.status = "failed";
+    job.failure_reason =
+      previousStatus === "printing"
+        ? "System restarted while this job was printing. The job was canceled during startup recovery."
+        : "System restarted while this job was waiting for customer approval or print completion. The orphaned job was canceled during startup recovery.";
+    job.printer_name = job.printer_name || printerName;
+    result.recovered++;
+    result.jobs.push({
+      id: job.id,
+      fileName: job.file_name,
+      previousStatus
+    });
+
+    if (!job.file_path || !fs.existsSync(job.file_path)) {
+      continue;
+    }
+
+    try {
+      fs.mkdirSync(failedDir, { recursive: true });
+      const nextPath = uniqueDestinationPath(failedDir, path.basename(job.file_path));
+      fs.renameSync(job.file_path, nextPath);
+      job.file_path = nextPath;
+      result.movedFiles++;
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (result.recovered > 0 || result.errors.length > 0) {
+    writeJobs(jobs);
+  }
+
+  return result;
+}
+
 function readJobs(): StoredPrintJob[] {
   ensureDirectories();
   if (!fs.existsSync(databasePath)) {
@@ -103,4 +165,17 @@ function readJobs(): StoredPrintJob[] {
 function writeJobs(jobs: StoredPrintJob[]): void {
   ensureDirectories();
   fs.writeFileSync(databasePath, JSON.stringify({ jobs }, null, 2), "utf8");
+}
+
+function uniqueDestinationPath(destinationDir: string, fileName: string): string {
+  const parsed = path.parse(fileName);
+  let candidate = path.join(destinationDir, fileName);
+  let counter = 1;
+
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(destinationDir, `${parsed.name}-${counter}${parsed.ext}`);
+    counter++;
+  }
+
+  return candidate;
 }
