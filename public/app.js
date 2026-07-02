@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.10").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.11").catch(() => {});
   });
 }
 
@@ -739,6 +739,7 @@ function renderDashboard() {
             </div>
             <div class="ops-detail-list">
               ${opsDetail("יצרן", printer?.manufacturer || "לא ידוע")}
+              ${printer?.isFiery ? opsDetail("בקר Fiery", printer?.controllerModel || "Fiery / EFI") : ""}
               ${opsDetail("חיבור", printer?.connectionType || "-")}
               ${opsDetail("תור Windows", printer ? `${printer.queueCount || 0} עבודות` : "-")}
               ${opsDetail("שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
@@ -1945,6 +1946,7 @@ function printerCompatibilityCard() {
     <div class="compat-card">
       <strong>תאימות מדפסת</strong>
       <div><span>יצרן</span><b>${escapeHtml(detail?.manufacturer || "לא ידוע")}</b></div>
+      ${detail?.isFiery ? `<div><span>בקר Fiery</span><b>${escapeHtml(detail.controllerModel || "Fiery / EFI")}</b></div>` : ""}
       <div><span>סטטוס</span><b>${detail ? (detail.available ? "זמינה" : "לא זמינה") : "לא נבחרה"}</b></div>
       <div><span>חיבור</span><b>${escapeHtml(detail?.connectionType || "-")}</b></div>
       <div><span>צבעוני</span><b>${capability(detail?.capabilities?.color)}</b></div>
