@@ -8,6 +8,20 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $TempZip = Join-Path $env:TEMP "whatsapp-print-server-update.zip"
 $ExtractRoot = Join-Path $env:TEMP "whatsapp-print-server-update-src"
 
+function Initialize-UnicodeConsole {
+  try {
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $Utf8NoBom
+    [Console]::OutputEncoding = $Utf8NoBom
+    $script:OutputEncoding = $Utf8NoBom
+    $OutputEncoding = $Utf8NoBom
+  } catch {}
+
+  try {
+    & "$env:SystemRoot\System32\chcp.com" 65001 | Out-Null
+  } catch {}
+}
+
 function Invoke-Checked($FilePath, [string[]]$Arguments) {
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne 0) {
@@ -19,14 +33,16 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $NodeDir = Split-Path -Parent $NodeExe
   $ShimDir = Join-Path $ProjectRoot "runtime\bin"
   $ShimPath = Join-Path $ShimDir "node.cmd"
-  New-Item -ItemType Directory -Force -Path $ShimDir | Out-Null
-  Set-Content -Path $ShimPath -Encoding ASCII -Value @(
-    "@echo off",
-    "`"$NodeExe`" %*"
-  )
-  $env:Path = "$ShimDir;$NodeDir;$env:Path"
+  if (Test-Path $ShimPath) {
+    Remove-Item -LiteralPath $ShimPath -Force -ErrorAction SilentlyContinue
+  }
+
+  $ExistingPath = (($env:Path -split ";") |
+    Where-Object { $_ -and ([string]::Compare($_, $ShimDir, $true) -ne 0) }) -join ";"
+  $env:Path = "$NodeDir;$ExistingPath"
   $env:npm_node_execpath = $NodeExe
   $env:NODE = $NodeExe
+  $env:npm_config_unicode = "true"
 }
 
 function Get-NodeExe() {
@@ -69,6 +85,8 @@ function Initialize-SumatraPdf($ProjectRoot) {
   }
   Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
 }
+
+Initialize-UnicodeConsole
 
 Write-Host "Stopping running server..."
 Get-CimInstance Win32_Process |

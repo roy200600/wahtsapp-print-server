@@ -199,7 +199,13 @@ function removeRegistryRunEntry(): void {
 function startupScriptContent(): string {
   return [
     "$ErrorActionPreference = \"Stop\"",
-    `$project = ${JSON.stringify(rootDir)}`,
+    "try {",
+    "  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)",
+    "  [Console]::InputEncoding = $Utf8NoBom",
+    "  [Console]::OutputEncoding = $Utf8NoBom",
+    "  $OutputEncoding = $Utf8NoBom",
+    "} catch {}",
+    "$project = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path",
     "Set-Location -LiteralPath $project",
     "$runtimeNode = Join-Path $project 'runtime\\node\\node.exe'",
     "if (Test-Path $runtimeNode) { $node = $runtimeNode } else { $node = (Get-Command node.exe -ErrorAction Stop).Source }",
