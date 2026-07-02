@@ -72,23 +72,8 @@ export interface PrinterProfileConfig {
   role: PrinterProfileRole;
   isPrimary: boolean;
   askCustomerColor: boolean;
-  fieryHotFolders: FieryHotFolderConfig;
   printProfile: PdfPrintProfile;
   officeProfile: OfficePrintProfile;
-}
-
-export interface FieryHotFolderConfig {
-  enabled: boolean;
-  askManager: boolean;
-  folders: FieryHotFolderEntry[];
-}
-
-export interface FieryHotFolderEntry {
-  id: string;
-  label: string;
-  paperSize: string;
-  path: string;
-  enabled: boolean;
 }
 
 export interface PricingConfig {
@@ -144,8 +129,6 @@ export interface IncomingAttachment {
   extension: string;
   sizeBytes: number;
   filePath: string;
-  fieryHotFolderPath?: string;
-  fieryHotFolderLabel?: string;
   messageText?: string;
   messageKey: string;
 }

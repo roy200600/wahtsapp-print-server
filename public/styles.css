@@ -444,15 +444,6 @@ a {
   font-size: 13px;
 }
 
-.license-code-input {
-  min-height: 110px;
-  direction: ltr;
-  text-align: left;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 14px;
-  letter-spacing: 0;
-}
-
 .license-file-row input[type="file"] {
   min-height: 48px;
   padding: 10px;
@@ -643,35 +634,6 @@ a {
 
 .printer-profile-card .form-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.helper-note {
-  color: var(--text-muted);
-  line-height: 1.6;
-  padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.42);
-}
-
-.fiery-folder-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.fiery-folder-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.7fr) minmax(140px, 1fr) minmax(120px, 0.7fr) minmax(240px, 1.6fr);
-  gap: 10px;
-  align-items: end;
-  padding: 12px;
-  border: 1px solid rgba(51, 65, 85, 0.9);
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.22);
-}
-
-.fiery-folder-row .check-tile {
-  min-height: 48px;
 }
 
 .printer-card-tabs,
@@ -2101,8 +2063,7 @@ td {
     grid-column: auto;
   }
 
-  .printer-profile-card .form-grid,
-  .fiery-folder-row {
+  .printer-profile-card .form-grid {
     grid-template-columns: 1fr;
   }
 

@@ -16,8 +16,6 @@ export interface PrinterCompatibilityInfo {
   isShared: boolean;
   isNetwork: boolean;
   isVirtual: boolean;
-  isFiery: boolean;
-  controllerModel: string;
   portName: string;
   location: string;
   comment: string;
@@ -80,15 +78,13 @@ export class PrinterStatusChecker {
     const issues: string[] = [];
     if (!printer.driverValid) issues.push("printer-driver-invalid");
     if (!printer.available) issues.push("printer-not-available");
-    if (!printer.isFiery && printer.queueErrors > 0) issues.push("queue-has-errors");
+    if (printer.queueErrors > 0) issues.push("queue-has-errors");
 
     return {
       ok: issues.length === 0,
       message:
         issues.length === 0
-          ? printer.isFiery && printer.queueErrors > 0
-            ? "Fiery זוהה והמדפסת זמינה. קיימות אזהרות בתור Windows, אך הן לא חוסמות שליחת עבודות ל-Fiery."
-            : "המדפסת זמינה ומוכנה לקבלת עבודות הדפסה."
+          ? "המדפסת זמינה ומוכנה לקבלת עבודות הדפסה."
           : "המדפסת נמצאה, אבל קיימת בעיית זמינות או שגיאה בתור ההדפסה.",
       printer,
       issues
@@ -117,12 +113,9 @@ export class PrinterCompatibilityLayer {
     const isShared = Boolean(raw.Shared);
     const driverValid = raw.DriverValid !== false;
     const isVirtual = detectVirtualPrinter(name, driverName, portName);
-    const fingerprint = `${name} ${driverName} ${portName} ${text(raw.Location)} ${text(raw.Comment)}`;
-    const isFiery = detectFiery(fingerprint);
-    const controllerModel = detectFieryControllerModel(fingerprint);
-    const manufacturer = detectManufacturer(fingerprint);
-    const connectionType = detectConnectionType(portName, isNetwork, isShared, isVirtual, isFiery);
-    const available = driverValid && isAvailable(status, printerStatus, isFiery ? 0 : queueErrors);
+    const manufacturer = detectManufacturer(`${name} ${driverName}`);
+    const connectionType = detectConnectionType(portName, isNetwork, isShared, isVirtual);
+    const available = driverValid && isAvailable(status, printerStatus, queueErrors);
     const paperSizes = array(raw.PaperSizes);
     const capabilities = {
       color: PrinterCapabilities.value(raw.Color),
@@ -141,8 +134,6 @@ export class PrinterCompatibilityLayer {
       isShared,
       isNetwork,
       isVirtual,
-      isFiery,
-      controllerModel,
       portName,
       location: text(raw.Location),
       comment: text(raw.Comment),
@@ -150,7 +141,7 @@ export class PrinterCompatibilityLayer {
       queueErrors,
       driverValid,
       capabilities,
-      compatibilityNote: compatibilityNote(available, capabilities, isFiery, controllerModel, queueErrors),
+      compatibilityNote: compatibilityNote(available, capabilities),
       available
     };
   }
@@ -213,7 +204,6 @@ $printers | ConvertTo-Json -Depth 5
 function detectManufacturer(value: string): string {
   const normalized = value.toLowerCase();
   const makers = [
-    ["Fiery (EFI)", ["fiery", "electronics for imaging", "efi ", " efi", " sc12c", "sc12c ", "fiery driver", "fiery driven"]],
     ["Fuji Xerox", ["fuji xerox"]],
     ["Xerox", ["xerox"]],
     ["HP", ["hewlett-packard", "hewlett packard", " hp ", "laserjet", "officejet", "deskjet"]],
@@ -251,9 +241,8 @@ function detectManufacturer(value: string): string {
   return "לא ידוע";
 }
 
-function detectConnectionType(portName: string, isNetwork: boolean, isShared: boolean, isVirtual: boolean, isFiery = false): string {
+function detectConnectionType(portName: string, isNetwork: boolean, isShared: boolean, isVirtual: boolean): string {
   const port = portName.toLowerCase();
-  if (isFiery) return "Fiery RIP/Print Server";
   if (isVirtual) return "Virtual/PDF";
   if (isShared) return "Shared Printer";
   if (
@@ -276,39 +265,14 @@ function detectVirtualPrinter(name: string, driverName: string, portName: string
   return /pdf|xps|onenote|fax|document writer/i.test(`${name} ${driverName} ${portName}`);
 }
 
-function detectFiery(value: string): boolean {
-  return /fiery|electronics\s+for\s+imaging|fiery\s+driver|fiery\s+driven|\befi\b|\bsc12c\b/i.test(value);
-}
-
-function detectFieryControllerModel(value: string): string {
-  const sc12c = value.match(/\bSC12C\b/i);
-  if (sc12c) return "Fiery SC12C";
-
-  const fieryModel = value.match(/\b(?:EX|EX-I|IC|GX|FS|E)-?\s?[A-Z0-9]{2,6}\b/i);
-  if (fieryModel && detectFiery(value)) return `Fiery ${fieryModel[0].replace(/\s+/g, "")}`;
-
-  return detectFiery(value) ? "Fiery / EFI" : "";
-}
-
 function isAvailable(status: string, printerStatus: string, queueErrors: number): boolean {
   const value = `${status} ${printerStatus}`.toLowerCase();
   if (queueErrors > 0) return false;
   return !/(offline|error|paper|jam|paused|blocked|intervention|not available)/i.test(value);
 }
 
-function compatibilityNote(
-  available: boolean,
-  capabilities: PrinterCompatibilityInfo["capabilities"],
-  isFiery = false,
-  controllerModel = "",
-  queueErrors = 0
-): string {
+function compatibilityNote(available: boolean, capabilities: PrinterCompatibilityInfo["capabilities"]): string {
   if (!available) return "נמצאה מדפסת, אך היא אינה זמינה כרגע או שיש שגיאה בתור.";
-  if (isFiery) {
-    const model = controllerModel ? ` (${controllerModel})` : "";
-    const queueNote = queueErrors > 0 ? " Windows מדווח אזהרות בתור, אך ב-Fiery הן נחשבות לאזהרה בלבד ולא חוסמות הדפסה." : "";
-    return `Fiery/EFI${model} זוהה דרך Windows Driver. ההדפסה תישלח לתור ה-Fiery, ויכולות צבע/דו-צדדי ייקראו מהדרייבר כאשר הן זמינות.${queueNote}`;
-  }
   const unknowns = Object.values(capabilities).filter((value) => value === "unknown").length;
   return unknowns ? "המדפסת זמינה. חלק מהיכולות לא דווחו על ידי הדרייבר." : "המדפסת זמינה ותואמת דרך Windows Driver.";
 }

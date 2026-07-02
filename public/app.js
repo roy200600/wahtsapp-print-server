@@ -459,7 +459,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.13").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.14").catch(() => {});
   });
 }
 
@@ -739,10 +739,9 @@ function renderDashboard() {
             </div>
             <div class="ops-detail-list">
               ${opsDetail("יצרן", printer?.manufacturer || "לא ידוע")}
-              ${printer?.isFiery ? opsDetail("בקר Fiery", printer?.controllerModel || "Fiery / EFI") : ""}
               ${opsDetail("חיבור", printer?.connectionType || "-")}
               ${opsDetail("תור Windows", printer ? `${printer.queueCount || 0} עבודות` : "-")}
-              ${opsDetail(printer?.isFiery ? "אזהרות תור Fiery" : "שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
+              ${opsDetail("שגיאות בתור", printer ? `${printer.queueErrors || 0}` : "-")}
               ${opsDetail("צבעוני", capability(printer?.capabilities?.color))}
               ${opsDetail("דו צדדי", capability(printer?.capabilities?.duplex))}
             </div>
@@ -1047,35 +1046,8 @@ function createUiPrinterProfile(index) {
     role: index === 0 ? "default" : "special",
     isPrimary: index === 0,
     askCustomerColor: false,
-    fieryHotFolders: createUiFieryHotFolders(),
     printProfile: { ...(state.config.pdfPrintProfile || {}) },
     officeProfile: { ...(state.config.officePrintProfile || {}) }
-  };
-}
-
-function createUiFieryHotFolders(existing = {}) {
-  const defaults = [
-    ["a4", "A4", "A4"],
-    ["a3", "A3", "A3"],
-    ["sra3", "SRA3", "SRA3"],
-    ["letter", "Letter", "LETTER"],
-    ["legal", "Legal", "LEGAL"],
-    ["custom", "Custom", "CUSTOM"]
-  ];
-  const sourceFolders = Array.isArray(existing.folders) ? existing.folders : [];
-  return {
-    enabled: Boolean(existing.enabled),
-    askManager: existing.askManager !== false,
-    folders: defaults.map(([id, label, paperSize]) => {
-      const source = sourceFolders.find((folder) => folder.id === id || folder.paperSize === paperSize) || {};
-      return {
-        id,
-        label: source.label || label,
-        paperSize: source.paperSize || paperSize,
-        path: source.path || "",
-        enabled: Object.prototype.hasOwnProperty.call(source, "enabled") ? source.enabled !== false : id !== "custom"
-      };
-    })
   };
 }
 
@@ -1083,8 +1055,7 @@ function renderPrinterProfileCard(profile, index) {
   const prefix = `printerProfile_${index}`;
   const printProfile = profile.printProfile || state.config.pdfPrintProfile || {};
   const officeProfile = profile.officeProfile || state.config.officePrintProfile || {};
-  const showFieryTab = isFieryPrinterProfile(profile);
-  const activeTab = state.currentPrinterTabs[index] === "fiery" && !showFieryTab ? "general" : (state.currentPrinterTabs[index] || "general");
+  const activeTab = state.currentPrinterTabs[index] || "general";
   const tabButton = (id, label) =>
     `<button type="button" class="printer-tab-button ${activeTab === id ? "active" : ""}" data-printer-index="${index}" data-printer-tab="${id}">${label}</button>`;
   const tabSection = (id, content) =>
@@ -1099,7 +1070,6 @@ function renderPrinterProfileCard(profile, index) {
         ${tabButton("general", "כללי")}
         ${tabButton("pdf", "פרופיל PDF")}
         ${tabButton("office", "Office")}
-        ${showFieryTab ? tabButton("fiery", "Fiery") : ""}
       </div>
       <input type="hidden" name="${prefix}_id" value="${escapeAttr(profile.id || `printer-${index + 1}`)}" />
       ${tabSection("general", `
@@ -1125,36 +1095,7 @@ function renderPrinterProfileCard(profile, index) {
         ${selectField(`${prefix}_powerPointOrientation`, "PowerPoint", options([["auto","אוטומטי"],["portrait","לאורך"],["landscape","לרוחב"]], officeProfile.powerPointOrientation))}
         ${checkField(`${prefix}_fitToWidth`, "התאם Office לרוחב דף", officeProfile.fitToWidth !== false)}
       `)}
-      ${showFieryTab ? tabSection("fiery", renderFieryHotFolderFields(prefix, profile)) : ""}
     </article>
-  `;
-}
-
-function isFieryPrinterProfile(profile) {
-  if (profile?.fieryHotFolders?.enabled) return true;
-  const selectedName = profile?.printerName || "";
-  const detail = state.printers.find((printer) => printer.name === selectedName);
-  return Boolean(detail?.isFiery || /fiery|efi|sc12c/i.test(`${selectedName} ${detail?.driverName || ""}`));
-}
-
-function renderFieryHotFolderFields(prefix, profile) {
-  const hotFolders = createUiFieryHotFolders(profile.fieryHotFolders || {});
-  return `
-    ${checkField(`${prefix}_fieryEnabled`, "הפעל Fiery Hot Folders למדפסת זו", hotFolders.enabled)}
-    ${checkField(`${prefix}_fieryAskManager`, "כאשר יש כמה גדלים, שאל את מנהל המערכת ב-WhatsApp", hotFolders.askManager)}
-    <div class="field full helper-note">
-      ניתן להזין נתיב תיקייה מלא או קיצור דרך ‎.lnk משולחן העבודה. אם קיימת יותר מתיקייה פעילה אחת, המנהל יקבל שאלה אמריקאית עם מספרים ושמות התיקיות.
-    </div>
-    <div class="fiery-folder-grid full">
-      ${hotFolders.folders.map((folder) => `
-        <div class="fiery-folder-row">
-          ${checkField(`${prefix}_fiery_${folder.id}_enabled`, folder.label, folder.enabled)}
-          ${inputField(`${prefix}_fiery_${folder.id}_label`, "שם בתפריט", folder.label)}
-          ${inputField(`${prefix}_fiery_${folder.id}_paperSize`, "גודל דף", folder.paperSize)}
-          ${inputField(`${prefix}_fiery_${folder.id}_path`, "תיקייה / קיצור דרך", folder.path, "C:\\Users\\...\\Desktop\\A4.lnk")}
-        </div>
-      `).join("")}
-    </div>
   `;
 }
 
@@ -1195,13 +1136,6 @@ function bindSettings() {
     button.addEventListener("click", () => {
       readSettingsForm();
       state.currentPrinterIndex = Number(button.dataset.printerProfileTab || 0);
-      render();
-    });
-  });
-
-  document.querySelectorAll("select[name$='_printerName']").forEach((select) => {
-    select.addEventListener("change", () => {
-      readSettingsForm();
       render();
     });
   });
@@ -1358,7 +1292,6 @@ function readPrinterProfiles(form) {
     const currentOfficeProfile = {
       ...(current.officeProfile || state.config.officePrintProfile || {})
     };
-    const currentFieryHotFolders = createUiFieryHotFolders(current.fieryHotFolders || {});
     const has = (name) => Boolean(form.elements[`${prefix}_${name}`]);
     const value = (name, fallback) => (has(name) ? form.elements[`${prefix}_${name}`].value : fallback);
     const checkedValue = (name, fallback) => (has(name) ? Boolean(form.elements[`${prefix}_${name}`].checked) : fallback);
@@ -1369,17 +1302,6 @@ function readPrinterProfiles(form) {
       role: value("role", current.role) || (index === 0 ? "default" : "special"),
       isPrimary: checkedValue("isPrimary", current.isPrimary),
       askCustomerColor: checkedValue("askCustomerColor", current.askCustomerColor),
-      fieryHotFolders: {
-        enabled: checkedValue("fieryEnabled", currentFieryHotFolders.enabled),
-        askManager: checkedValue("fieryAskManager", currentFieryHotFolders.askManager !== false),
-        folders: currentFieryHotFolders.folders.map((folder) => ({
-          id: folder.id,
-          label: value(`fiery_${folder.id}_label`, folder.label) || folder.label,
-          paperSize: value(`fiery_${folder.id}_paperSize`, folder.paperSize) || folder.paperSize,
-          path: value(`fiery_${folder.id}_path`, folder.path) || "",
-          enabled: checkedValue(`fiery_${folder.id}_enabled`, folder.enabled !== false)
-        }))
-      },
       printProfile: {
         colorMode: value("colorMode", currentPrintProfile.colorMode) || "grayscale",
         duplex: value("duplex", currentPrintProfile.duplex) || "simplex",
@@ -1577,13 +1499,6 @@ function renderLicense() {
           <button id="activateLicenseBtn" type="button" class="btn btn-success"><i data-lucide="shield-check"></i><span>הפעל רישיון</span></button>
         </div>
       </article>
-      <article class="panel wide">
-        ${sectionTitle("key", "הפעלה באמצעות קוד", "הדבק כאן קוד רישוי שקיבלת מ-MY-PC במקום קובץ JSON")}
-        <label class="field full"><span>קוד רישוי</span><textarea id="licenseCodeInput" class="license-code-input" rows="6" placeholder="MYPC-XXXXX-XXXXX-XXXXX"></textarea></label>
-        <div class="inline-actions">
-          <button id="activateLicenseCodeBtn" type="button" class="btn btn-success"><i data-lucide="key-round"></i><span>הפעל באמצעות קוד</span></button>
-        </div>
-      </article>
     </section>
   `;
 }
@@ -1662,21 +1577,6 @@ function bindLicense() {
       notify("success", "הרישיון הופעל בהצלחה.");
     } catch (error) {
       notify("error", error.message || "הפעלת הרישיון נכשלה.");
-    } finally {
-      setLoading(false);
-    }
-  });
-
-  $("#activateLicenseCodeBtn")?.addEventListener("click", async () => {
-    setLoading(true, "מפעיל רישיון מקוד...");
-    try {
-      const licenseCode = $("#licenseCodeInput").value.trim();
-      state.license = await api("/api/license/activate", postJson({ license: licenseCode }));
-      await loadAll();
-      render();
-      notify("success", "הרישיון הופעל בהצלחה באמצעות קוד.");
-    } catch (error) {
-      notify("error", error.message || "הפעלת קוד הרישוי נכשלה.");
     } finally {
       setLoading(false);
     }
@@ -2023,7 +1923,6 @@ function printerCompatibilityCard() {
     <div class="compat-card">
       <strong>תאימות מדפסת</strong>
       <div><span>יצרן</span><b>${escapeHtml(detail?.manufacturer || "לא ידוע")}</b></div>
-      ${detail?.isFiery ? `<div><span>בקר Fiery</span><b>${escapeHtml(detail.controllerModel || "Fiery / EFI")}</b></div>` : ""}
       <div><span>סטטוס</span><b>${detail ? (detail.available ? "זמינה" : "לא זמינה") : "לא נבחרה"}</b></div>
       <div><span>חיבור</span><b>${escapeHtml(detail?.connectionType || "-")}</b></div>
       <div><span>צבעוני</span><b>${capability(detail?.capabilities?.color)}</b></div>
