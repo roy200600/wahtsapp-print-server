@@ -187,19 +187,25 @@ function Initialize-Ghostscript($ProjectRoot) {
   $InstallerPath = Join-Path $env:TEMP $InstallerName
   $InstallPath = Join-Path $GhostscriptRoot "gs$($GhostscriptVersion)"
 
-  Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath
-  $process = Start-Process -FilePath $InstallerPath -ArgumentList @("/S", "/D=$InstallPath") -Wait -PassThru -WindowStyle Hidden
-  if ($process.ExitCode -ne 0) {
-    throw "Ghostscript installer failed with exit code $($process.ExitCode)"
-  }
+  try {
+    Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList @("/S", "/D=$InstallPath") -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -ne 0) {
+      Write-Warning "Ghostscript installer failed with exit code $($process.ExitCode). PDF compatibility mode will fall back to SumatraPDF."
+      return
+    }
 
-  $InstalledExe = Get-ChildItem -Path (Join-Path $GhostscriptRoot "*\bin\gswin64c.exe") -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  if (-not $InstalledExe) {
-    throw "Ghostscript was downloaded but gswin64c.exe was not found under $GhostscriptRoot"
-  }
+    $InstalledExe = Get-ChildItem -Path (Join-Path $GhostscriptRoot "*\bin\gswin64c.exe") -ErrorAction SilentlyContinue |
+      Select-Object -First 1
+    if (-not $InstalledExe) {
+      Write-Warning "Ghostscript was downloaded but gswin64c.exe was not found under $GhostscriptRoot. PDF compatibility mode will fall back to SumatraPDF."
+      return
+    }
 
-  Write-Host "Ghostscript installed: $($InstalledExe.FullName)"
+    Write-Host "Ghostscript installed: $($InstalledExe.FullName)"
+  } catch {
+    Write-Warning "Ghostscript setup failed: $($_.Exception.Message). PDF compatibility mode will fall back to SumatraPDF."
+  }
 }
 
 function New-AppShortcut($ProjectRoot, $ShortcutPath) {

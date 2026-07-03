@@ -99,6 +99,7 @@ Assert-FileExists "docs\QA-1.0.30.md"
 Assert-FileExists "docs\QA-1.0.31.md"
 Assert-FileExists "docs\QA-1.0.32.md"
 Assert-FileExists "docs\QA-1.0.33.md"
+Assert-FileExists "docs\QA-1.0.34.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -152,8 +153,11 @@ Test-TextContains "scripts\print-pdf-profile.ps1" "Ghostscript compatibility ren
 Test-TextContains "scripts\print-pdf-profile.ps1" "ProcessStartInfo"
 Test-TextContains "scripts\install-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\install-windows.ps1" "gs10071w64.exe"
+Test-TextContains "scripts\install-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\update-windows.ps1" "Initialize-Ghostscript"
+Test-TextContains "scripts\update-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\start-windows.ps1" "Initialize-Ghostscript"
+Test-TextContains "scripts\start-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\main.ts" "EADDRINUSE"

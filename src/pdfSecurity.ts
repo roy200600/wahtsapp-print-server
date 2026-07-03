@@ -2,28 +2,32 @@ import fs from "node:fs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export function isPasswordProtectedPdf(filePath: string): boolean {
-  const stat = fs.statSync(filePath);
-  const size = stat.size;
-  const chunkSize = Math.min(1024 * 1024, size);
-  const chunks: Buffer[] = [];
+  const chunkSize = 1024 * 1024;
+  const needle = Buffer.from("/Encrypt", "latin1");
+  let carry = Buffer.alloc(0);
   const fd = fs.openSync(filePath, "r");
 
   try {
-    const first = Buffer.alloc(chunkSize);
-    fs.readSync(fd, first, 0, chunkSize, 0);
-    chunks.push(first);
+    const buffer = Buffer.alloc(chunkSize);
 
-    if (size > chunkSize) {
-      const tailSize = Math.min(2 * 1024 * 1024, size);
-      const tail = Buffer.alloc(tailSize);
-      fs.readSync(fd, tail, 0, tailSize, Math.max(0, size - tailSize));
-      chunks.push(tail);
+    while (true) {
+      const bytesRead = fs.readSync(fd, buffer, 0, chunkSize, null);
+      if (bytesRead <= 0) {
+        return false;
+      }
+
+      const current = bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);
+      const searchable = carry.length ? Buffer.concat([carry, current]) : current;
+      if (searchable.indexOf(needle) !== -1) {
+        return true;
+      }
+
+      const carryLength = Math.min(needle.length - 1, searchable.length);
+      carry = Buffer.from(searchable.subarray(searchable.length - carryLength));
     }
   } finally {
     fs.closeSync(fd);
   }
-
-  return /\/Encrypt\b/.test(Buffer.concat(chunks).toString("latin1"));
 }
 
 export function extractPdfPassword(text: string | undefined, allowBareText = false): string | undefined {
