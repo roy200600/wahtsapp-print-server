@@ -89,6 +89,104 @@ function Convert-SumatraDuplex {
   }
 }
 
+function ConvertTo-ProcessArgument {
+  param([AllowNull()][string]$Argument)
+
+  if ($null -eq $Argument -or $Argument.Length -eq 0) {
+    return '""'
+  }
+
+  if ($Argument -notmatch '[\s"]') {
+    return $Argument
+  }
+
+  $escaped = $Argument -replace '(\\*)"', '$1$1\"'
+  $escaped = $escaped -replace '(\\+)$', '$1$1'
+  return '"' + $escaped + '"'
+}
+
+function Join-ProcessArguments {
+  param([string[]]$Arguments)
+  return ($Arguments | ForEach-Object { ConvertTo-ProcessArgument ([string]$_) }) -join " "
+}
+
+function Invoke-NativeProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FileName,
+
+    [string[]]$Arguments = @()
+  )
+
+  if (-not (Test-Path -LiteralPath $FileName)) {
+    throw "Executable not found: $FileName"
+  }
+
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $FileName
+  $startInfo.Arguments = Join-ProcessArguments $Arguments
+  $startInfo.WorkingDirectory = Split-Path -Parent $FileName
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+
+  try {
+    [void]$process.Start()
+    $process.WaitForExit()
+    return $process.ExitCode
+  } finally {
+    $process.Dispose()
+  }
+}
+
+function Get-WindowsShortPath {
+  param([string]$Path)
+
+  if (-not ("MyPc.NativePath" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace MyPc
+{
+  public static class NativePath
+  {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint GetShortPathName(string longPath, StringBuilder shortPath, uint bufferLength);
+  }
+}
+"@
+  }
+
+  try {
+    $builder = New-Object System.Text.StringBuilder 1024
+    $result = [MyPc.NativePath]::GetShortPathName($Path, $builder, [uint32]$builder.Capacity)
+    if ($result -gt 0 -and $result -lt $builder.Capacity) {
+      return $builder.ToString()
+    }
+  } catch {
+    return $Path
+  }
+
+  return $Path
+}
+
+function New-SumatraSafePdfCopy {
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-sumatra-" + [System.Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+  $tempFile = Join-Path $tempDir "document.pdf"
+  Copy-Item -LiteralPath $FilePath -Destination $tempFile -Force
+
+  return [pscustomobject]@{
+    Directory = $tempDir
+    FilePath = Get-WindowsShortPath $tempFile
+  }
+}
+
 function Find-Ghostscript {
   $command = Get-Command gswin64c.exe -ErrorAction SilentlyContinue
   if ($command) {
@@ -444,10 +542,25 @@ function Send-WithSumatra {
 
   $settings = ($sumatraSettings | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
 
-  & $SumatraPath "-silent" "-print-to" $PrinterName "-print-settings" $settings $FilePath
+  $safePdf = New-SumatraSafePdfCopy
 
-  if ($LASTEXITCODE -ne 0) {
-    throw "SumatraPDF print failed with exit code $LASTEXITCODE"
+  try {
+    $arguments = @(
+      "-silent",
+      "-print-to",
+      $PrinterName,
+      "-print-settings",
+      $settings,
+      $safePdf.FilePath
+    )
+
+    $exitCode = Invoke-NativeProcess -FileName $SumatraPath -Arguments $arguments
+
+    if ($exitCode -ne 0) {
+      throw "SumatraPDF print failed with exit code $exitCode. Printer: $PrinterName. Settings: $settings"
+    }
+  } finally {
+    Remove-Item -LiteralPath $safePdf.Directory -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
