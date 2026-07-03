@@ -59,6 +59,25 @@ function Get-PdfCryptoPython {
   return $null
 }
 
+function Invoke-NodeSmoke {
+  param(
+    [string]$Name,
+    [string]$Script,
+    [string[]]$Arguments = @()
+  )
+
+  $tempScript = Join-Path $ProjectRoot (".mypc-node-smoke-" + [System.Guid]::NewGuid().ToString("N") + ".mjs")
+  Set-Content -LiteralPath $tempScript -Encoding UTF8 -Value $Script
+  try {
+    node $tempScript @Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "$Name failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue
+  }
+}
+
 if (-not $SkipBuild) {
   npm run build
 }
@@ -66,6 +85,7 @@ if (-not $SkipBuild) {
 Assert-FileExists "public\assets\fonts\Rubik-Variable.ttf"
 Assert-FileExists "tools\SumatraPDF\SumatraPDF.exe"
 Assert-FileExists "docs\QA-1.0.19.md"
+Assert-FileExists "docs\QA-1.0.20.md"
 Assert-FileExists "docs\QA-1.0.21.md"
 Assert-FileExists "docs\QA-1.0.22.md"
 Assert-FileExists "docs\QA-1.0.23.md"
@@ -73,6 +93,7 @@ Assert-FileExists "docs\QA-1.0.24.md"
 Assert-FileExists "docs\QA-1.0.25.md"
 Assert-FileExists "docs\QA-1.0.26.md"
 Assert-FileExists "docs\QA-1.0.27.md"
+Assert-FileExists "docs\QA-1.0.28.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -89,11 +110,28 @@ Test-PowerShellSyntax @(
 
 Test-TextContains "public\index.html" "/styles.css?v="
 Test-TextContains "public\index.html" "/app.js?v="
+Test-TextContains "public\index.html" 'lang="he" dir="rtl"'
+Test-TextContains "public\index.html" 'aria-live="polite"'
+Test-TextContains "public\index.html" 'alt="MY-PC"'
+Test-TextContains "public\index.html" 'data-lucide='
 Test-TextContains "public\styles.css" "Rubik-Variable.ttf"
+Test-TextContains "public\styles.css" "font-display: swap"
 Test-TextContains "public\styles.css" ":focus-visible"
 Test-TextContains "public\styles.css" "prefers-reduced-motion"
 Test-TextContains "public\styles.css" "overflow-x: hidden"
 Test-TextContains "public\styles.css" "@media (max-width:"
+Test-TextContains "public\styles.css" "@media (max-width: 620px)"
+Test-TextContains "public\styles.css" "cursor: pointer"
+Test-TextContains "public\styles.css" "table-layout: fixed"
+Test-TextContains "public\styles.css" ".printer-profile-tabs"
+Test-TextContains "public\styles.css" ".ops-jobs-table"
+Test-TextContains "public\app.js" "document.documentElement.dir"
+Test-TextContains "public\app.js" "if (window.lucide) window.lucide.createIcons()"
+Test-TextContains "public\app.js" "function setOptionalText"
+Test-TextContains "public\app.js" "if (element) element.textContent"
+Test-TextContains "public\app.js" "renderPrinterProfileCards"
+Test-TextContains "public\app.js" "data-printer-profile-tab"
+Test-TextContains "public\app.js" "escapeHtml"
 Test-TextContains "package.json" "pdfjs-dist"
 Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
@@ -106,6 +144,43 @@ Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\alerts.ts" "972522250223"
 Test-TextContains "src\printOrders.ts" "this.orders.delete(order.phone)"
+
+$uiStaticSmoke = @'
+const fs = await import('node:fs');
+
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const version = pkg.version;
+const cacheVersion = version.replaceAll('.', '-');
+const index = fs.readFileSync('public/index.html', 'utf8');
+const app = fs.readFileSync('public/app.js', 'utf8');
+const css = fs.readFileSync('public/styles.css', 'utf8');
+const sw = fs.readFileSync('public/sw.js', 'utf8');
+
+const expectations = [
+  [index.includes('<html lang="he" dir="rtl">'), 'index html must start in Hebrew RTL'],
+  [index.includes('/styles.css?v=' + version), 'stylesheet cache version must match package version'],
+  [index.includes('/app.js?v=' + version), 'app cache version must match package version'],
+  [sw.includes('my-pc-print-server-v' + cacheVersion), 'service worker cache version must match package version'],
+  [css.includes('font-family: "Rubik"') || css.includes('font-family: Rubik'), 'Rubik must be the system font'],
+  [css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be respected'],
+  [css.includes('@media (max-width: 620px)'), 'mobile responsive breakpoint must exist'],
+  [css.includes('table-layout: fixed'), 'job tables must have stable column sizing'],
+  [app.includes('function setOptionalText') && app.includes('if (element) element.textContent'), 'optional UI text setter must guard missing elements'],
+  [app.includes('document.documentElement.dir'), 'language switching must update page direction'],
+  [app.includes('window.lucide.createIcons'), 'Lucide icons must be initialized when available'],
+  [app.includes('renderPrinterProfileCards') && app.includes('data-printer-profile-tab'), 'printer profiles must render as tabs'],
+  [app.includes('/api/updates/check') && app.includes('/api/updates/run'), 'cloud update UI actions must be wired'],
+  [app.includes('escapeHtml') && app.includes('escapeAttr'), 'dynamic UI strings must be escaped']
+];
+
+const failed = expectations.filter(([ok]) => !ok).map(([, message]) => message);
+if (failed.length) {
+  console.error({ failed });
+  process.exit(1);
+}
+'@
+
+Invoke-NodeSmoke "UI static smoke" $uiStaticSmoke
 
 $hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
 $dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")
@@ -172,7 +247,7 @@ if (!results.every(Boolean)) {
 }
 '@
 
-node --input-type=module -e $pdfSecuritySmoke
+Invoke-NodeSmoke "PDF security smoke" $pdfSecuritySmoke
 
 $alertsSmoke = @'
 const alerts = await import('./dist/alerts.js');
@@ -197,7 +272,7 @@ for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-12
 }
 '@
 
-node --input-type=module -e $alertsSmoke
+Invoke-NodeSmoke "System alerts smoke" $alertsSmoke
 
 $fileValidationSmoke = @'
 const fs = await import('node:fs');
@@ -244,7 +319,7 @@ try {
 }
 '@
 
-node --input-type=module -e $fileValidationSmoke
+Invoke-NodeSmoke "File validation smoke" $fileValidationSmoke
 
 $pdfCryptoPython = Get-PdfCryptoPython
 if ($pdfCryptoPython) {
@@ -258,7 +333,7 @@ if ($pdfCryptoPython) {
     $pdfCryptoSmoke = @'
 const m = await import('./dist/pdfSecurity.js');
 const p = await import('./dist/pageCounter.js');
-const pdf = process.argv[1];
+const pdf = process.argv.at(-1);
 const wrong = await m.verifyPdfPassword(pdf, 'wrong', 'tools/SumatraPDF/SumatraPDF.exe');
 const right = await m.verifyPdfPassword(pdf, '312830714', 'tools/SumatraPDF/SumatraPDF.exe');
 const pages = await p.countAttachmentPages({
@@ -281,7 +356,7 @@ if (wrong.ok || !right.ok || pages !== 1) {
 }
 '@
 
-    node --input-type=module -e $pdfCryptoSmoke $cryptoPdf
+    Invoke-NodeSmoke "Encrypted PDF password verification" $pdfCryptoSmoke @($cryptoPdf)
 
     $printOrderPasswordFlowSmoke = @'
 const fs = await import('node:fs');
@@ -291,7 +366,7 @@ const { PrintOrderManager } = await import('./dist/printOrders.js');
 const { defaultConfig } = await import('./dist/config.js');
 const { databasePath, appPaths } = await import('./dist/paths.js');
 
-const sourcePdf = process.argv[1];
+const sourcePdf = process.argv.at(-1);
 const dbHadContent = fs.existsSync(databasePath);
 const dbBackup = dbHadContent ? fs.readFileSync(databasePath) : undefined;
 const runId = `qa-password-flow-${Date.now()}`;
@@ -398,7 +473,7 @@ try {
 }
 '@
 
-    node --input-type=module -e $printOrderPasswordFlowSmoke $cryptoPdf
+    Invoke-NodeSmoke "Encrypted PDF order flow" $printOrderPasswordFlowSmoke @($cryptoPdf)
   } finally {
     Remove-Item -LiteralPath $cryptoDir -Recurse -Force -ErrorAction SilentlyContinue
   }
