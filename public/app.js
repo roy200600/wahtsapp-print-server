@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.42";
+const APP_VERSION = "1.0.43";
 
 const state = {
   authenticated: false,
@@ -1740,6 +1740,9 @@ function renderDiagnostics() {
     <section class="two-column fade-in">
       <article class="panel wide">
         ${sectionTitle("stethoscope", "בדיקת מנועי הדפסה", "SumatraPDF, Ghostscript ומצב תאימות PDF")}
+        <div class="inline-actions">
+          <button id="downloadCustomerQaBtn" type="button" class="btn btn-muted"><i data-lucide="download"></i><span>הפק דוח QA לקוח</span></button>
+        </div>
         <div id="printEngineStatus" class="engine-status-grid">
           ${emptyState("בודק רכיבי הדפסה...")}
         </div>
@@ -1758,12 +1761,59 @@ function renderDiagnostics() {
 
 function bindDiagnostics() {
   loadPrintEngineStatus();
+  $("#downloadCustomerQaBtn")?.addEventListener("click", downloadCustomerQaReport);
   document.querySelectorAll("[data-log]").forEach((button) => {
     button.addEventListener("click", async () => {
       const log = await api(`/api/log-files/${encodeURIComponent(button.dataset.log)}`);
       $("#logPreview").textContent = log.content || "";
     });
   });
+}
+
+async function downloadCustomerQaReport() {
+  setLoading(true, "מפיק דוח QA...");
+  try {
+    const [status, engines, printers, logFiles] = await Promise.all([
+      api("/api/status"),
+      api("/api/diagnostics/print-engines").catch((error) => ({ error: error.message || String(error) })),
+      api("/api/printers/details").catch((error) => ({ error: error.message || String(error) })),
+      api("/api/log-files").catch(() => [])
+    ]);
+
+    const report = {
+      type: "my-pc-whatsapp-print-customer-qa",
+      generatedAt: new Date().toISOString(),
+      browserTime: new Date().toLocaleString("he-IL"),
+      server: {
+        version: status.version || "",
+        whatsappConnected: Boolean(status.whatsapp?.connected),
+        selectedPrinter: status.config?.printerName || "",
+        licenseMode: status.license?.mode || ""
+      },
+      printEngines: engines,
+      printers: Array.isArray(printers) ? printers.map((printer) => ({
+        name: printer.name,
+        manufacturer: printer.manufacturer,
+        status: printer.status,
+        printerStatus: printer.printerStatus,
+        available: printer.available,
+        isDefault: printer.isDefault,
+        connectionType: printer.connectionType,
+        queueCount: printer.queueCount,
+        queueErrors: printer.queueErrors,
+        compatibilityNote: printer.compatibilityNote
+      })) : printers,
+      logFiles
+    };
+
+    const businessName = safeFileName(state.registration?.businessName || "customer");
+    downloadJsonFile(report, `${businessName}-customer-qa-${Date.now()}.json`);
+    notify("success", "דוח QA נוצר והורד למחשב.");
+  } catch (error) {
+    notify("error", error.message || "הפקת דוח QA נכשלה.");
+  } finally {
+    setLoading(false);
+  }
 }
 
 async function loadPrintEngineStatus() {

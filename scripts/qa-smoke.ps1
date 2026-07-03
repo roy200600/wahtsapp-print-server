@@ -101,6 +101,7 @@ Assert-FileExists "docs\QA-1.0.39.md"
 Assert-FileExists "docs\QA-1.0.40.md"
 Assert-FileExists "docs\QA-1.0.41.md"
 Assert-FileExists "docs\QA-1.0.42.md"
+Assert-FileExists "docs\QA-1.0.43.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -147,6 +148,8 @@ Test-TextContains "public\app.js" "const APP_VERSION"
 Test-TextContains "public\app.js" "updateViaCache: `"none`""
 Test-TextContains "public\app.js" "ensureFreshAppVersion"
 Test-TextContains "public\app.js" "/api/diagnostics/print-engines"
+Test-TextContains "public\app.js" "downloadCustomerQaReport"
+Test-TextContains "public\app.js" "my-pc-whatsapp-print-customer-qa"
 Test-TextContains "public\styles.css" ".engine-status-grid"
 Test-TextContains "src\adminServer.ts" "/api/diagnostics/print-engines"
 Test-TextContains "src\printEngines.ts" "PDF compatibility mode will fall back to SumatraPDF"
@@ -212,6 +215,7 @@ const expectations = [
   [app.includes('updateViaCache: "none"'), 'service worker updates must bypass browser cache'],
   [app.includes('ensureFreshAppVersion(status)'), 'app must detect stale UI against server version'],
   [app.includes('/api/diagnostics/print-engines') && app.includes('engineStatusCard'), 'diagnostics UI must show PDF print engine status'],
+  [app.includes('downloadCustomerQaReport') && app.includes('my-pc-whatsapp-print-customer-qa'), 'diagnostics UI must export a customer QA report'],
   [sw.includes('my-pc-print-server-v' + cacheVersion), 'service worker cache version must match package version'],
   [!sw.includes('"/",'), 'service worker must not cache the HTML shell'],
   [sw.includes('event.request.mode === "navigate"') && sw.includes('fetch(event.request, { cache: "no-store" })'), 'navigation requests must bypass the service worker cache'],
