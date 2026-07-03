@@ -4,8 +4,8 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Current Release
 
-- Customer release tag: `v1.0.56`
-- Latest repository commit: see Git tag `v1.0.56`
+- Customer release tag: `v1.0.57`
+- Latest repository commit: see Git tag `v1.0.57`
 - Latest full QA command: `npm run qa:smoke`
 
 ## Requirement Status
@@ -30,12 +30,13 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 | Images/JPG/JPEG/PNG | Covered to dry-run boundary | `scripts/qa-smoke.ps1` validates image dry-run script coverage. Physical printer output still requires field validation. |
 | Office files Word/Excel/PowerPoint | Covered to dry-run boundary | Default allowed types include Office formats and QA exercises Office print scripts in dry-run mode. `v1.0.56` opens Word and Excel through temp copies to reduce source-file locks and EBUSY failures. Physical output still requires field validation. |
 | Service-worker stale UI after update | Covered | `v1.0.41` stopped caching the HTML shell and added UI/server version mismatch recovery. |
+| Cloud update starts but does not clearly complete | Mitigated | `v1.0.57` adds update status/log files, `/api/updates/status`, and a wrapper that attempts to restart the existing server if the update fails. |
 | Restart during active print job | Mitigated | Startup recovery marks interrupted `received`/`printing` jobs as failed, clears stale app spooler jobs including PowerPoint temp jobs, and `v1.0.53` adds retry/copy fallback for locked files during recovery. |
 | Customer physical print output | Not fully proven | Requires real customer machine + real printer validation. Code QA cannot prove paper output, spooler behavior, driver quality, or printer-specific rendering. `v1.0.54` adds the required physical-print checklist to customer QA reports. |
 
 ## Field Validation Still Required
 
-Run these on at least one real customer machine after updating to `v1.0.56`:
+Run these on at least one real customer machine after updating to `v1.0.57`:
 
 1. Open diagnostics and confirm SumatraPDF is available.
 2. Confirm Ghostscript is either available or clearly shown as a warning.
@@ -52,4 +53,4 @@ Run these on at least one real customer machine after updating to `v1.0.56`:
 ## Notes
 
 - The current evidence supports the application logic and diagnostics paths.
-- The goal should remain open until at least one customer environment validates physical printing after `v1.0.56`.
+- The goal should remain open until at least one customer environment validates physical printing and cloud update completion after `v1.0.57`.

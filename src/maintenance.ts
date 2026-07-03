@@ -116,7 +116,7 @@ export async function checkForUpdates(): Promise<{
   };
 }
 
-export async function runUpdate(): Promise<{ started: boolean; message: string }> {
+async function runUpdateDetachedLegacy(): Promise<{ started: boolean; message: string }> {
   const scriptPath = path.join(rootDir, "scripts", "update-windows.ps1");
   if (!fs.existsSync(scriptPath)) {
     throw new Error("Update script was not found.");
@@ -141,6 +141,100 @@ export async function runUpdate(): Promise<{ started: boolean; message: string }
   return { started: true, message: "העדכון הופעל ברקע. המתן כדקה ואז רענן את הדף." };
 }
 
+export type UpdateRunStatus = {
+  status: "idle" | "starting" | "running" | "completed" | "failed";
+  message: string;
+  startedAt?: string;
+  finishedAt?: string;
+  exitCode?: number | null;
+  logPath: string;
+};
+
+export function getUpdateStatus(): UpdateRunStatus {
+  const statusPath = getUpdateStatusPath();
+  const logPath = getUpdateLogPath();
+  if (!fs.existsSync(statusPath)) {
+    return {
+      status: "idle",
+      message: "No update was started yet.",
+      logPath
+    };
+  }
+
+  try {
+    return {
+      logPath,
+      ...JSON.parse(fs.readFileSync(statusPath, "utf8"))
+    };
+  } catch {
+    return {
+      status: "failed",
+      message: "Update status file could not be read.",
+      logPath
+    };
+  }
+}
+
+export async function runUpdate(): Promise<{ started: boolean; message: string; status: UpdateRunStatus }> {
+  const scriptPath = path.join(rootDir, "scripts", "update-windows.ps1");
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error("Update script was not found.");
+  }
+
+  fs.mkdirSync(appPaths.logsDir, { recursive: true });
+  const statusPath = getUpdateStatusPath();
+  const logPath = getUpdateLogPath();
+  const wrapperPath = path.join(appPaths.logsDir, "run-update-wrapper.ps1");
+  const startedAt = new Date().toISOString();
+  const initialStatus: UpdateRunStatus = {
+    status: "starting",
+    message: "Update process was queued.",
+    startedAt,
+    logPath
+  };
+  fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2), "utf8");
+  fs.writeFileSync(logPath, `MY-PC update started at ${startedAt}\r\n`, "utf8");
+  fs.writeFileSync(wrapperPath, updateWrapperScript(scriptPath, statusPath, logPath, rootDir), "utf8");
+
+  const powershellPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+  const outFd = fs.openSync(logPath, "a");
+  const child = spawn(powershellPath, [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    wrapperPath
+  ], {
+    detached: true,
+    windowsHide: true,
+    stdio: ["ignore", outFd, outFd]
+  });
+  child.on("error", (error) => {
+    try {
+      fs.writeFileSync(statusPath, JSON.stringify({
+        status: "failed",
+        message: error.message,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        exitCode: 1,
+        logPath
+      }, null, 2), "utf8");
+    } catch {}
+  });
+  child.on("close", () => {
+    try { fs.closeSync(outFd); } catch {}
+  });
+  child.unref();
+
+  return {
+    started: true,
+    message: "העדכון הופעל ברקע. המערכת שומרת לוג עדכון ותנסה להחזיר את השרת גם אם העדכון ייכשל.",
+    status: initialStatus
+  };
+}
+
 export function getCurrentVersion(): string {
   return APP_VERSION;
 }
@@ -161,6 +255,48 @@ function getStartupShortcutPath(): string {
 
 function getStartupScriptPath(): string {
   return path.join(rootDir, "scripts", "start-server-hidden.ps1");
+}
+
+function getUpdateStatusPath(): string {
+  return path.join(appPaths.logsDir, "update-status.json");
+}
+
+function getUpdateLogPath(): string {
+  return path.join(appPaths.logsDir, "update-latest.log");
+}
+
+function updateWrapperScript(scriptPath: string, statusPath: string, logPath: string, projectRoot: string): string {
+  const startScript = path.join(projectRoot, "scripts", "start-windows.ps1");
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$startedAt = (Get-Date).ToString('o')",
+    `$statusPath = ${JSON.stringify(statusPath)}`,
+    `$logPath = ${JSON.stringify(logPath)}`,
+    `$scriptPath = ${JSON.stringify(scriptPath)}`,
+    `$startScript = ${JSON.stringify(startScript)}`,
+    "function Write-UpdateStatus($State, $Message, $ExitCode) {",
+    "  $payload = @{ status = $State; message = $Message; startedAt = $startedAt; finishedAt = (Get-Date).ToString('o'); exitCode = $ExitCode; logPath = $logPath }",
+    "  $payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statusPath -Encoding UTF8",
+    "}",
+    "Write-UpdateStatus 'running' 'Update script is running.' $null",
+    "try {",
+    "  Add-Content -LiteralPath $logPath -Value ('Running update script: ' + $scriptPath)",
+    "  & $scriptPath *>&1 | Tee-Object -FilePath $logPath -Append",
+    "  if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw ('Update script exited with code ' + $LASTEXITCODE) }",
+    "  Write-UpdateStatus 'completed' 'Update completed. Server restart was requested.' 0",
+    "} catch {",
+    "  $message = $_.Exception.Message",
+    "  Add-Content -LiteralPath $logPath -Value ('Update failed: ' + $message)",
+    "  Write-UpdateStatus 'failed' $message 1",
+    "  try {",
+    "    Add-Content -LiteralPath $logPath -Value 'Trying to restart the existing server after update failure.'",
+    "    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript -Hidden *>&1 | Tee-Object -FilePath $logPath -Append",
+    "  } catch {",
+    "    Add-Content -LiteralPath $logPath -Value ('Server restart after update failure also failed: ' + $_.Exception.Message)",
+    "  }",
+    "  exit 1",
+    "}"
+  ].join("\r\n");
 }
 
 function hasRegistryRunEntry(): boolean {

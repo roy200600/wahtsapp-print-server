@@ -11,6 +11,7 @@ import {
   enableStartup,
   getCurrentVersion,
   getStartupStatus,
+  getUpdateStatus,
   runUpdate
 } from "./maintenance.js";
 import { stopPrintQueue } from "./printQueue.js";
@@ -219,6 +220,10 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  app.get("/api/updates/status", (_req, res) => {
+    res.json(getUpdateStatus());
   });
 
   app.post("/api/updates/run", async (_req, res) => {

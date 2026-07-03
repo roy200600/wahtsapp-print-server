@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.56";
+const APP_VERSION = "1.0.57";
 const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
 
 const state = {
@@ -12,6 +12,7 @@ const state = {
   printedFiles: [],
   logFiles: [],
   updateInfo: null,
+  updateStatus: null,
   registration: null,
   currentPage: "dashboard",
   currentSettingsTab: "printer",
@@ -536,19 +537,21 @@ async function action(loadingText, path, successText) {
 }
 
 async function loadAll() {
-  const [status, jobs, printers, printedFiles, logFiles, updateInfo] = await Promise.all([
+  const [status, jobs, printers, printedFiles, logFiles, updateInfo, updateStatus] = await Promise.all([
     api("/api/status"),
     api("/api/jobs"),
     api("/api/printers/details").catch(() => []),
     api("/api/printed/files").catch(() => []),
     api("/api/log-files").catch(() => []),
-    api("/api/updates/check").catch(() => null)
+    api("/api/updates/check").catch(() => null),
+    api("/api/updates/status").catch(() => null)
   ]);
   await ensureFreshAppVersion(status);
   state.status = status;
   state.license = status.license;
   state.registration = status.registration || null;
   state.updateInfo = updateInfo;
+  state.updateStatus = updateStatus;
   state.config = status.config;
   state.jobs = jobs;
   state.printers = printers;
@@ -1931,6 +1934,7 @@ function renderAdvanced() {
 
 function bindAdvanced() {
   $("#stopPrintingBtn")?.addEventListener("click", stopPrinting);
+  renderUpdateRunStatus();
   document.querySelectorAll("[data-office-test]").forEach((button) => {
     button.addEventListener("click", () => runOfficeTest(button.dataset.officeTest));
   });
@@ -1941,6 +1945,18 @@ function bindAdvanced() {
   api("/api/startup").then((result) => {
     $("#startupText").textContent = result.enabled ? "המערכת תעלה אוטומטית עם Windows" : "הפעלה אוטומטית כבויה";
   }).catch(() => {});
+}
+
+function renderUpdateRunStatus() {
+  const host = $("#updateStatusText");
+  const updateStatus = state.updateStatus;
+  if (!host || !updateStatus || updateStatus.status === "idle") return;
+  const parts = [
+    `סטטוס עדכון אחרון: ${updateStatus.status}`,
+    updateStatus.message || "",
+    updateStatus.logPath ? `לוג: ${updateStatus.logPath}` : ""
+  ].filter(Boolean);
+  host.textContent = parts.join(" | ");
 }
 
 async function checkUpdates() {
@@ -1960,6 +1976,7 @@ async function runUpdate() {
   setLoading(true, "מתקין עדכון... המערכת תתרענן אוטומטית בעוד כשתי דקות. עדכונים נוספים בדרך.");
   try {
     const result = await api("/api/updates/run", { method: "POST" });
+    state.updateStatus = result.status || null;
     notify("success", result.message || "העדכון הסתיים.");
     setOptionalText("#updateStatusText", result.message || "העדכון הסתיים.");
     setTimeout(() => window.location.reload(), 120000);
