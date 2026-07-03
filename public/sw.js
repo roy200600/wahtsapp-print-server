@@ -1,6 +1,5 @@
-const CACHE_NAME = "my-pc-print-server-v1-0-40";
+const CACHE_NAME = "my-pc-print-server-v1-0-41";
 const APP_SHELL = [
-  "/",
   "/styles.css",
   "/app.js",
   "/manifest.webmanifest",
@@ -29,9 +28,12 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.pathname.startsWith("/api/")) return;
 
-  const shouldNetworkFirst =
-    event.request.mode === "navigate" ||
-    ["/", "/app.js", "/styles.css", "/sw.js"].includes(requestUrl.pathname);
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
+    return;
+  }
+
+  const shouldNetworkFirst = ["/app.js", "/styles.css", "/sw.js"].includes(requestUrl.pathname);
 
   if (shouldNetworkFirst) {
     event.respondWith(networkFirst(event.request));
@@ -45,7 +47,7 @@ async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request, { cache: "no-store" });
-    cache.put(request, response.clone());
+    if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
     return (await cache.match(request)) || Response.error();
@@ -57,6 +59,6 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  cache.put(request, response.clone());
+  if (response.ok) cache.put(request, response.clone());
   return response;
 }

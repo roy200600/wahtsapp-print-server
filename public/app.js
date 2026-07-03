@@ -1,3 +1,5 @@
+const APP_VERSION = "1.0.41";
+
 const state = {
   authenticated: false,
   authConfigured: false,
@@ -466,8 +468,34 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.40").catch(() => {});
+    navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { updateViaCache: "none" }).catch(() => {});
   });
+}
+
+async function ensureFreshAppVersion(status) {
+  if (!status?.version || status.version === APP_VERSION) return;
+
+  const reloadKey = `my-pc-app-version-reload-${status.version}`;
+  if (sessionStorage.getItem(reloadKey)) {
+    notify("warning", `גרסת הממשק אינה תואמת לשרת. רענן את הדף לגרסה ${status.version}.`);
+    return;
+  }
+
+  sessionStorage.setItem(reloadKey, "1");
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.update().catch(() => {})));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => key.startsWith("my-pc-print-server-")).map((key) => caches.delete(key)));
+    }
+  } catch {
+    // A clean reload is still useful even if browser cache cleanup is blocked.
+  }
+
+  location.replace(`${location.pathname}?v=${encodeURIComponent(status.version)}&t=${Date.now()}`);
 }
 
 function applyStaticTranslations() {
@@ -515,6 +543,7 @@ async function loadAll() {
     api("/api/log-files").catch(() => []),
     api("/api/updates/check").catch(() => null)
   ]);
+  await ensureFreshAppVersion(status);
   state.status = status;
   state.license = status.license;
   state.registration = status.registration || null;

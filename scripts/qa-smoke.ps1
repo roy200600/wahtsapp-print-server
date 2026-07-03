@@ -40,6 +40,18 @@ function Test-TextContains {
   }
 }
 
+function Test-TextDoesNotContain {
+  param(
+    [string]$Path,
+    [string]$Pattern
+  )
+
+  $content = Get-Content -LiteralPath $Path -Raw
+  if ($content -match [regex]::Escape($Pattern)) {
+    throw "Expected '$Path' not to contain '$Pattern'"
+  }
+}
+
 function Invoke-NodeSmoke {
   param(
     [string]$Name,
@@ -87,6 +99,7 @@ Assert-FileExists "docs\QA-1.0.37.md"
 Assert-FileExists "docs\QA-1.0.38.md"
 Assert-FileExists "docs\QA-1.0.39.md"
 Assert-FileExists "docs\QA-1.0.40.md"
+Assert-FileExists "docs\QA-1.0.41.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
 
 Test-PowerShellSyntax @(
@@ -126,6 +139,11 @@ Test-TextContains "public\app.js" "if (element) element.textContent"
 Test-TextContains "public\app.js" "renderPrinterProfileCards"
 Test-TextContains "public\app.js" "data-printer-profile-tab"
 Test-TextContains "public\app.js" "escapeHtml"
+Test-TextContains "public\app.js" "const APP_VERSION"
+Test-TextContains "public\app.js" "updateViaCache: `"none`""
+Test-TextContains "public\app.js" "ensureFreshAppVersion"
+Test-TextContains "public\sw.js" "event.request.mode === `"navigate`""
+Test-TextDoesNotContain "public\sw.js" '"/",'
 Test-TextContains "package.json" "pdfjs-dist"
 Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
@@ -178,8 +196,13 @@ const expectations = [
   [index.includes('<html lang="he" dir="rtl">'), 'index html must start in Hebrew RTL'],
   [index.includes('/styles.css?v=' + version), 'stylesheet cache version must match package version'],
   [index.includes('/app.js?v=' + version), 'app cache version must match package version'],
-  [app.includes('/sw.js?v=' + version), 'service worker registration version must match package version'],
+  [app.includes('register(`/sw.js?v=${APP_VERSION}`'), 'service worker registration must use runtime app version'],
+  [app.includes('const APP_VERSION = "' + version + '"'), 'app runtime version must match package version'],
+  [app.includes('updateViaCache: "none"'), 'service worker updates must bypass browser cache'],
+  [app.includes('ensureFreshAppVersion(status)'), 'app must detect stale UI against server version'],
   [sw.includes('my-pc-print-server-v' + cacheVersion), 'service worker cache version must match package version'],
+  [!sw.includes('"/",'), 'service worker must not cache the HTML shell'],
+  [sw.includes('event.request.mode === "navigate"') && sw.includes('fetch(event.request, { cache: "no-store" })'), 'navigation requests must bypass the service worker cache'],
   [css.includes('font-family: "Rubik"') || css.includes('font-family: Rubik'), 'Rubik must be the system font'],
   [css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be respected'],
   [css.includes('@media (max-width: 620px)'), 'mobile responsive breakpoint must exist'],
