@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { appPaths, rootDir } from "./paths.js";
+import { APP_VERSION } from "./version.js";
 
 const execFileAsync = promisify(execFile);
 const startupShortcutName = "WhatsApp Print Server.lnk";
@@ -141,13 +142,7 @@ export async function runUpdate(): Promise<{ started: boolean; message: string }
 }
 
 export function getCurrentVersion(): string {
-  try {
-    const packagePath = path.join(rootDir, "package.json");
-    const parsed = JSON.parse(fs.readFileSync(packagePath, "utf8")) as { version?: string };
-    return parsed.version || "unknown";
-  } catch {
-    return "unknown";
-  }
+  return APP_VERSION;
 }
 
 function getStartupShortcutPath(): string {

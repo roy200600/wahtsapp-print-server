@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $MinimumDiagnosticsVersion = "1.0.42"
-$RecommendedVersion = "1.0.43"
+$RecommendedVersion = "1.0.46"
 
 function Add-Check {
   param(

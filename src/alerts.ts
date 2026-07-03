@@ -1,9 +1,7 @@
 import os from "node:os";
-import fs from "node:fs";
-import path from "node:path";
 import { loadConfig } from "./config.js";
 import { logger } from "./logger.js";
-import { rootDir } from "./paths.js";
+import { APP_VERSION } from "./version.js";
 
 type AlertSender = (phone: string, text: string) => Promise<void>;
 
@@ -128,10 +126,5 @@ function formatSize(bytes: number): string {
 }
 
 function getAppVersion(): string {
-  try {
-    const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8")) as { version?: string };
-    return String(packageJson.version || "").trim();
-  } catch {
-    return "";
-  }
+  return APP_VERSION;
 }

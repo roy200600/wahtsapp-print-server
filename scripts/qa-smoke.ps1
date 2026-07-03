@@ -104,6 +104,7 @@ Assert-FileExists "docs\QA-1.0.42.md"
 Assert-FileExists "docs\QA-1.0.43.md"
 Assert-FileExists "docs\QA-1.0.44.md"
 Assert-FileExists "docs\QA-1.0.45.md"
+Assert-FileExists "docs\QA-1.0.46.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -189,6 +190,9 @@ Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\printQueue.ts" "buildStopPrintQueueCommand"
 Test-TextContains "src\main.ts" "EADDRINUSE"
+Test-TextContains "src\version.ts" "APP_VERSION"
+Test-TextContains "src\maintenance.ts" "return APP_VERSION"
+Test-TextContains "src\alerts.ts" "return APP_VERSION"
 Test-TextContains "src\alerts.ts" "972522250223"
 Test-TextContains "src\alerts.ts" "App version"
 Test-TextContains "src\errorDetails.ts" "cmd"
@@ -222,6 +226,9 @@ const expectations = [
   [index.includes('/app.js?v=' + version), 'app cache version must match package version'],
   [app.includes('register(`/sw.js?v=${APP_VERSION}`'), 'service worker registration must use runtime app version'],
   [app.includes('const APP_VERSION = "' + version + '"'), 'app runtime version must match package version'],
+  [fs.readFileSync('src/version.ts', 'utf8').includes('APP_VERSION = "' + version + '"'), 'server build version must match package version'],
+  [fs.readFileSync('src/maintenance.ts', 'utf8').includes('return APP_VERSION'), 'server status version must come from compiled build code'],
+  [fs.readFileSync('src/alerts.ts', 'utf8').includes('return APP_VERSION'), 'system alerts must use compiled build version'],
   [app.includes('updateViaCache: "none"'), 'service worker updates must bypass browser cache'],
   [app.includes('ensureFreshAppVersion(status)'), 'app must detect stale UI against server version'],
   [app.includes('/api/diagnostics/print-engines') && app.includes('engineStatusCard'), 'diagnostics UI must show PDF print engine status'],
@@ -271,6 +278,24 @@ if (failures.length) {
 '@
 
 Invoke-NodeSmoke "Print engine diagnostics smoke" $printEngineSmoke
+
+$versionSmoke = @'
+const fs = await import('node:fs');
+const { APP_VERSION } = await import('./dist/version.js');
+const { getCurrentVersion } = await import('./dist/maintenance.js');
+
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const failures = [];
+if (APP_VERSION !== pkg.version) failures.push(`APP_VERSION ${APP_VERSION} does not match package ${pkg.version}`);
+if (getCurrentVersion() !== APP_VERSION) failures.push('getCurrentVersion must return the compiled build version');
+
+if (failures.length) {
+  console.error({ failures });
+  process.exit(1);
+}
+'@
+
+Invoke-NodeSmoke "Compiled version smoke" $versionSmoke
 
 $hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
 $dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")
