@@ -38,7 +38,7 @@ void recoverStartupState().finally(() => {
   const licenseStatus = getLicenseStatus();
   if (licenseStatus.canRun) {
     void whatsapp.start().catch((error) => {
-      logger.error({ error }, "WhatsApp failed to start");
+      logger.error({ err: error }, "WhatsApp failed to start");
       sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
     });
   } else {
@@ -50,7 +50,7 @@ setInterval(() => {
   const status = getLicenseStatus();
   if (!status.canRun && whatsapp.getState().connected) {
     void whatsapp.stop(false).catch((error) => {
-      logger.error({ error }, "Failed to stop WhatsApp after license lock");
+      logger.error({ err: error }, "Failed to stop WhatsApp after license lock");
     });
   }
 }, 60 * 1000);
@@ -63,7 +63,7 @@ setInterval(() => {
 }, 24 * 60 * 60 * 1000);
 
 process.on("uncaughtException", (error) => {
-  logger.error({ error }, "Unhandled exception");
+  logger.error({ err: error }, "Unhandled exception");
   sendSystemAlert("חריגה (Unhandled Exception)", error.message);
 });
 
@@ -96,7 +96,7 @@ async function recoverStartupState(): Promise<void> {
         logger.warn({ result }, "Removed stale MY-PC print jobs from Windows spooler during startup");
       }
     } catch (error) {
-      logger.error({ error, printerName }, "Failed to clear startup print queue");
+      logger.error({ err: error, printerName }, "Failed to clear startup print queue");
     }
   }
 }

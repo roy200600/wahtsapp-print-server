@@ -16,7 +16,7 @@ export async function printFile(attachment: IncomingAttachment, config: AppConfi
 
   const extension = attachment.extension.toLowerCase();
   if (extension === "pdf") {
-    await printPdfWithSumatra(attachment.filePath, config);
+    await printPdfWithSumatra(attachment, config);
     return;
   }
 
@@ -48,7 +48,7 @@ export async function printFile(attachment: IncomingAttachment, config: AppConfi
   await printWithWindowsShell(attachment.filePath);
 }
 
-async function printPdfWithSumatra(filePath: string, config: AppConfig): Promise<void> {
+async function printPdfWithSumatra(attachment: IncomingAttachment, config: AppConfig): Promise<void> {
   const profile = config.pdfPrintProfile;
   await execFileAsync("powershell.exe", [
     "-NoProfile",
@@ -57,7 +57,7 @@ async function printPdfWithSumatra(filePath: string, config: AppConfig): Promise
     "-File",
     path.join(rootDir, "scripts", "print-pdf-profile.ps1"),
     "-FilePath",
-    filePath,
+    attachment.filePath,
     "-PrinterName",
     config.printerName,
     "-SumatraPath",
@@ -74,6 +74,8 @@ async function printPdfWithSumatra(filePath: string, config: AppConfig): Promise
     profile.scaling,
     "-ScalePercent",
     String(profile.scalePercent),
+    "-PdfPassword",
+    attachment.pdfPassword ?? "",
     "-Copies",
     String(profile.copies),
     "-Dpi",

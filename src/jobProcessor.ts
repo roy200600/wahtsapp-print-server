@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { AppConfig, IncomingAttachment, PrintLogEntry } from "./types.js";
 import { validateAttachment } from "./security.js";
@@ -36,20 +37,18 @@ export async function registerAttachment(
   const validation = await validateAttachment(attachment, config);
   if (!validation.ok) {
     moveTo(attachment.filePath, appPaths.failedDir);
-    sendSystemAlert(classifyValidationFailure(validation.reason), validation.reason);
+    sendSystemAlert(classifyValidationFailure(validation.reason), validation.reason, attachmentAlertContext(attachment, config));
     return writeLog(attachment, config, createdAt, "rejected", validation.reason);
   }
 
   const trialCheck = registerTrialDocument(attachment.senderPhone);
   if (!trialCheck.ok) {
     moveTo(attachment.filePath, appPaths.failedDir);
-    sendSystemAlert("Trial limit reached", trialCheck.reason);
+    sendSystemAlert("Trial limit reached", trialCheck.reason, attachmentAlertContext(attachment, config));
     return writeLog(attachment, config, createdAt, "rejected", trialCheck.reason);
   }
 
-  const initial = writeLog(attachment, config, createdAt, "received");
-
-  return initial;
+  return writeLog(attachment, config, createdAt, "received");
 }
 
 export async function printRegisteredAttachment(
@@ -74,10 +73,21 @@ export async function printRegisteredAttachment(
     const reason = error instanceof Error ? error.message : String(error);
     const failedPath = moveTo(attachment.filePath, appPaths.failedDir);
     setPrintStatus(attachment.id, "failed", reason, config.printerName);
-    sendSystemAlert("ההדפסה נכשלה", reason);
-    logger.error({ error, attachment }, "Print failed");
+    sendSystemAlert("ההדפסה נכשלה", reason, attachmentAlertContext(attachment, config));
+    logger.error({ err: error, attachment }, "Print failed");
     return { ...attachment, status: "failed", failureReason: reason, filePath: failedPath };
   }
+}
+
+export function failRegisteredAttachment(
+  attachment: PrintLogEntry,
+  getConfig: () => AppConfig,
+  reason: string
+): PrintLogEntry {
+  const config = applyLicenseLimits(getConfig());
+  const failedPath = moveTo(attachment.filePath, appPaths.failedDir);
+  setPrintStatus(attachment.id, "failed", reason, config.printerName);
+  return { ...attachment, status: "failed", failureReason: reason, filePath: failedPath, printerName: config.printerName };
 }
 
 function writeLog(
@@ -121,7 +131,8 @@ function deletePrintedArtifacts(downloadPath: string, printedPath: string, jobId
     } catch (error) {
       sendSystemAlert(
         "מחיקת קובץ לאחר הדפסה נכשלה",
-        error instanceof Error ? error.message : String(error)
+        error instanceof Error ? error.message : String(error),
+        { jobId, computerName: os.hostname(), extra: { targetPath } }
       );
       logger.error({ err: error, jobId, targetPath }, "Failed to delete printed file");
     }
@@ -137,4 +148,17 @@ function classifyValidationFailure(reason: string): string {
   if (reason.includes("not allowed")) return "סוג קובץ לא נתמך";
   if (reason.includes("content looks")) return "קובץ פגום";
   return "קובץ נדחה";
+}
+
+function attachmentAlertContext(attachment: IncomingAttachment, config: AppConfig) {
+  return {
+    jobId: attachment.id,
+    customerName: attachment.senderName,
+    customerPhone: attachment.senderPhone,
+    fileName: attachment.fileName,
+    fileType: attachment.extension,
+    fileSizeBytes: attachment.sizeBytes,
+    printerName: config.printerName,
+    computerName: os.hostname()
+  };
 }

@@ -165,13 +165,13 @@ if ($Hidden) {
   Start-Process -FilePath $NodeExe -ArgumentList @("dist/main.js") -WorkingDirectory $ProjectRoot -WindowStyle Hidden
   if ($OpenBrowser) {
     Start-Sleep -Seconds 3
-    Start-Process "http://localhost:3010"
+    Start-Process "http://localhost:$ConfiguredPort"
   }
-  Write-Host "MY-PC WhatsApp Print Server started in background: http://localhost:3010"
+  Write-Host "MY-PC WhatsApp Print Server started in background: http://localhost:$ConfiguredPort"
 } else {
-  Write-Host "MY-PC WhatsApp Print Server starting: http://localhost:3010"
+  Write-Host "MY-PC WhatsApp Print Server starting: http://localhost:$ConfiguredPort"
   if ($OpenBrowser) {
-    Start-Process "http://localhost:3010"
+    Start-Process "http://localhost:$ConfiguredPort"
   }
   & $NodeExe dist/main.js
 }

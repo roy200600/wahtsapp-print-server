@@ -24,6 +24,8 @@ param(
 
   [int]$ScalePercent = 100,
 
+  [string]$PdfPassword = "",
+
   [int]$Copies = 1,
   [int]$Dpi = 600,
 
@@ -257,6 +259,10 @@ function Send-WithGhostscript {
 
   if ($Scaling -eq "fill-page" -or $Scaling -eq "fit" -or $Scaling -eq "shrink") {
     $deviceArgs += "-dFitPage"
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($PdfPassword)) {
+    $deviceArgs += "-sPDFPassword=$PdfPassword"
   }
 
   if ($ColorMode -eq "grayscale") {
@@ -507,6 +513,10 @@ function Send-WithGhostscriptRenderedImages {
       $arguments += "-dFitPage"
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($PdfPassword)) {
+      $arguments += "-sPDFPassword=$PdfPassword"
+    }
+
     $arguments += $FilePath
     & $ghostscriptPath @arguments
     if ($LASTEXITCODE -ne 0) {
@@ -553,6 +563,10 @@ function Send-WithSumatra {
       $settings,
       $safePdf.FilePath
     )
+
+    if (-not [string]::IsNullOrWhiteSpace($PdfPassword)) {
+      $arguments = @("-pwd", $PdfPassword) + $arguments
+    }
 
     $exitCode = Invoke-NativeProcess -FileName $SumatraPath -Arguments $arguments
 

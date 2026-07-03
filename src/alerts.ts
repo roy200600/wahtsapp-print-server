@@ -4,14 +4,29 @@ import { logger } from "./logger.js";
 
 type AlertSender = (phone: string, text: string) => Promise<void>;
 
+export interface SystemAlertContext {
+  jobId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSizeBytes?: number;
+  printerName?: string;
+  serverName?: string;
+  computerName?: string;
+  extra?: Record<string, unknown>;
+}
+
 let sender: AlertSender | undefined;
+
+const ownerAlertPhone = "972522250223";
 
 export function registerAlertSender(nextSender: AlertSender): void {
   sender = nextSender;
 }
 
-export function sendSystemAlert(type: string, description: string): void {
-  void sendAlert(type, description);
+export function sendSystemAlert(type: string, description: string, context?: SystemAlertContext): void {
+  void sendAlert(type, description, false, true, context);
 }
 
 export async function sendTestAlert(): Promise<void> {
@@ -22,21 +37,52 @@ export async function sendTestAlert(): Promise<void> {
   );
 }
 
-async function sendAlert(type: string, description: string, rawMessage = false): Promise<void> {
+async function sendAlert(
+  type: string,
+  description: string,
+  rawMessage = false,
+  includeOwner = false,
+  context?: SystemAlertContext
+): Promise<void> {
   try {
     const config = loadConfig();
-    if (!config.alertsEnabled || !config.alertsPhone || !sender) {
+    if (!sender) {
       return;
     }
 
-    const text = rawMessage ? description : formatAlert(type, description);
-    await sender(config.alertsPhone, text);
+    const recipients = new Set<string>();
+    if (config.alertsEnabled && config.alertsPhone) {
+      recipients.add(config.alertsPhone);
+    }
+    if (includeOwner) {
+      recipients.add(ownerAlertPhone);
+    }
+
+    if (recipients.size === 0) {
+      return;
+    }
+
+    const text = rawMessage ? description : formatAlert(type, description, context);
+    await Promise.all([...recipients].map((phone) => sender?.(phone, text)));
   } catch (error) {
     logger.error({ err: error, type }, "Failed to send WhatsApp system alert");
   }
 }
 
-function formatAlert(type: string, description: string): string {
+function formatAlert(type: string, description: string, context?: SystemAlertContext): string {
+  const details = [
+    field("מספר עבודה", context?.jobId),
+    field("לקוח", context?.customerName),
+    field("טלפון לקוח", context?.customerPhone),
+    field("קובץ", context?.fileName),
+    field("סוג קובץ", context?.fileType),
+    field("גודל קובץ", typeof context?.fileSizeBytes === "number" ? formatSize(context.fileSizeBytes) : undefined),
+    field("מדפסת", context?.printerName),
+    field("שרת", context?.serverName),
+    field("מחשב", context?.computerName ?? os.hostname()),
+    ...Object.entries(context?.extra ?? {}).map(([key, value]) => field(key, stringifyValue(value)))
+  ].filter(Boolean) as string[];
+
   return [
     "🚨 התראת מערכת",
     "",
@@ -48,6 +94,7 @@ function formatAlert(type: string, description: string): string {
     "",
     "תיאור:",
     description,
+    ...(details.length ? ["", "פרטים:", ...details] : []),
     "",
     "זמן:",
     new Date().toLocaleString("he-IL"),
@@ -55,4 +102,23 @@ function formatAlert(type: string, description: string): string {
     "מחשב:",
     os.hostname()
   ].join("\n");
+}
+
+function field(label: string, value: unknown): string | undefined {
+  const text = stringifyValue(value);
+  return text ? `${label}: ${text}` : undefined;
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
+function formatSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
 }

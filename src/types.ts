@@ -131,6 +131,8 @@ export interface IncomingAttachment {
   filePath: string;
   messageText?: string;
   messageKey: string;
+  pdfPassword?: string;
+  pdfPasswordRequired?: boolean;
 }
 
 export interface PrintLogEntry extends IncomingAttachment {

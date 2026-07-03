@@ -1,11 +1,13 @@
+import os from "node:os";
 import type { AppConfig, IncomingAttachment, PrintLogEntry } from "./types.js";
-import { registerAttachment, printRegisteredAttachment } from "./jobProcessor.js";
+import { failRegisteredAttachment, registerAttachment, printRegisteredAttachment } from "./jobProcessor.js";
 import { countAttachmentPages } from "./pageCounter.js";
 import { sendSystemAlert } from "./alerts.js";
 import { setPrintStatus } from "./db.js";
 import { logger } from "./logger.js";
 import { adminIncomingPrintMessage, queuedMessage, renderCustomerMessage } from "./customerMessages.js";
 import { getLicenseStatus } from "./license.js";
+import { extractPdfPassword, isPasswordProtectedPdf, verifyPdfPassword } from "./pdfSecurity.js";
 
 type SendMessage = (remoteJid: string, text: string) => Promise<void>;
 
@@ -45,13 +47,16 @@ export class PrintOrderManager {
     const order = this.getOrCreateOrder(entry);
     order.remoteJid = entry.chatId;
     order.senderName = entry.senderName;
-    order.attachments.push(entry);
     order.updatedAt = Date.now();
-    order.pageCounts.set(entry.id, await countAttachmentPages(entry));
-    this.resetTimers(order);
 
+    const ready = await this.addAttachmentToOrder(order, entry);
+    if (!ready) {
+      return;
+    }
+
+    this.resetTimers(order);
     const message =
-      order.attachments.length === 1
+      ready.readyCount === 1
         ? this.getConfig().customerMessages.orderPrompt
         : this.getConfig().customerMessages.fileAdded;
     await this.safeSend(order.remoteJid, message);
@@ -65,6 +70,13 @@ export class PrintOrderManager {
 
     order.remoteJid = remoteJid;
     order.updatedAt = Date.now();
+
+    const pendingPassword = this.nextPasswordProtectedAttachment(order);
+    if (pendingPassword) {
+      await this.handlePdfPasswordReply(order, pendingPassword, text);
+      return true;
+    }
+
     const command = classifyCustomerCommand(text);
     if (command === "print") {
       await this.printOrder(order);
@@ -84,6 +96,72 @@ export class PrintOrderManager {
 
     await this.safeSend(remoteJid, this.getConfig().customerMessages.reminder);
     return true;
+  }
+
+  private async addAttachmentToOrder(
+    order: PendingPrintOrder,
+    entry: PrintLogEntry
+  ): Promise<{ readyCount: number } | undefined> {
+    if (entry.extension.toLowerCase() === "pdf" && isPasswordProtectedPdf(entry.filePath)) {
+      entry.pdfPasswordRequired = true;
+      const password = extractPdfPassword(entry.messageText, false);
+
+      if (!password) {
+        order.attachments.push(entry);
+        this.resetTimers(order);
+        await this.safeSend(order.remoteJid, pdfPasswordPrompt(entry));
+        return undefined;
+      }
+
+      const verified = await verifyPdfPassword(entry.filePath, password, this.getConfig().sumatraPdfPath);
+      if (!verified.ok) {
+        this.failPasswordProtectedPdf(entry, verified.reason);
+        await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+        return undefined;
+      }
+
+      entry.pdfPassword = password;
+    }
+
+    order.attachments.push(entry);
+    order.pageCounts.set(entry.id, await countAttachmentPages(entry));
+    return { readyCount: this.readyAttachments(order).length };
+  }
+
+  private async handlePdfPasswordReply(
+    order: PendingPrintOrder,
+    attachment: PrintLogEntry,
+    text: string
+  ): Promise<void> {
+    const password = extractPdfPassword(text, true);
+    if (!password) {
+      await this.safeSend(order.remoteJid, pdfPasswordPrompt(attachment));
+      return;
+    }
+
+    const verified = await verifyPdfPassword(attachment.filePath, password, this.getConfig().sumatraPdfPath);
+    if (!verified.ok) {
+      this.failPasswordProtectedPdf(attachment, verified.reason);
+      order.attachments = order.attachments.filter((item) => item.id !== attachment.id);
+      order.pageCounts.delete(attachment.id);
+      await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+      if (order.attachments.length === 0) {
+        this.clearTimers(order);
+        this.orders.delete(order.phone);
+      }
+      return;
+    }
+
+    attachment.pdfPassword = password;
+    order.pageCounts.set(attachment.id, await countAttachmentPages(attachment));
+    this.resetTimers(order);
+    await this.safeSend(order.remoteJid, pdfPasswordAcceptedMessage(order));
+  }
+
+  private failPasswordProtectedPdf(attachment: PrintLogEntry, reason: string): void {
+    const failed = failRegisteredAttachment(attachment, this.getConfig, reason);
+    sendSystemAlert("PDF מוגן בסיסמה לא הודפס", reason, attachmentAlertContext(failed, this.getConfig()));
+    logger.warn({ attachmentId: attachment.id, reason }, "Password-protected PDF was rejected");
   }
 
   private getOrCreateOrder(entry: PrintLogEntry): PendingPrintOrder {
@@ -111,14 +189,33 @@ export class PrintOrderManager {
       return;
     }
 
+    const pendingPassword = this.nextPasswordProtectedAttachment(order);
+    if (pendingPassword) {
+      await this.safeSend(order.remoteJid, pdfPasswordPrompt(pendingPassword));
+      return;
+    }
+
+    const readyAttachments = this.readyAttachments(order);
+    if (readyAttachments.length === 0) {
+      await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+      this.orders.delete(order.phone);
+      return;
+    }
+
     order.isPrinting = true;
     this.clearTimers(order);
     const context = this.context(order);
     await this.safeSend(order.remoteJid, queuedMessage(this.getConfig(), context));
-    void sendSystemAlert("התפסה נכנסה", adminIncomingPrintMessage(context));
+    void sendSystemAlert("התפסה נכנסה", adminIncomingPrintMessage(context), {
+      customerName: order.senderName,
+      customerPhone: order.phone,
+      printerName: this.getConfig().printerName,
+      computerName: os.hostname(),
+      extra: { files: context.files, pages: context.pages }
+    });
 
     const results: PrintLogEntry[] = [];
-    for (const attachment of order.attachments) {
+    for (const attachment of readyAttachments) {
       results.push(await printRegisteredAttachment(attachment, this.getConfig));
     }
 
@@ -188,9 +285,17 @@ export class PrintOrderManager {
     const counts = [...order.pageCounts.values()];
     return {
       phone: order.phone,
-      files: order.attachments.length,
+      files: this.readyAttachments(order).length,
       pages: Math.max(1, counts.reduce((sum, count) => sum + count, 0))
     };
+  }
+
+  private nextPasswordProtectedAttachment(order: PendingPrintOrder): PrintLogEntry | undefined {
+    return order.attachments.find((attachment) => attachment.pdfPasswordRequired && !attachment.pdfPassword);
+  }
+
+  private readyAttachments(order: PendingPrintOrder): PrintLogEntry[] {
+    return order.attachments.filter((attachment) => !attachment.pdfPasswordRequired || Boolean(attachment.pdfPassword));
   }
 
   private async safeSend(remoteJid: string, text: string): Promise<void> {
@@ -219,4 +324,41 @@ function classifyCustomerCommand(text: string): "print" | "more" | "cancel" | "u
     return "cancel";
   }
   return "unknown";
+}
+
+function pdfPasswordPrompt(attachment: PrintLogEntry): string {
+  return [
+    "הקובץ שהתקבל מוגן בסיסמה:",
+    attachment.fileName,
+    "",
+    "כדי שנוכל להדפיס אותו, יש לשלוח את סיסמת הקובץ בהודעה חוזרת.",
+    "לדוגמה:",
+    "סיסמה 1234",
+    "",
+    "הקובץ לא יודפס עד שהסיסמה תיבדק ותימצא תקינה."
+  ].join("\n");
+}
+
+function pdfPasswordAcceptedMessage(order: PendingPrintOrder): string {
+  const pending = order.attachments.filter((attachment) => attachment.pdfPasswordRequired && !attachment.pdfPassword).length;
+  return [
+    "סיסמת ה־PDF התקבלה ונבדקה בהצלחה.",
+    pending > 0 ? `נשארו עוד ${pending} קבצים שממתינים לסיסמה.` : "אפשר להמשיך.",
+    "",
+    "אם סיימת לשלוח קבצים כתוב 1 או סיימתי.",
+    "אם יש עוד קבצים כתוב 2."
+  ].join("\n");
+}
+
+function attachmentAlertContext(attachment: PrintLogEntry, config: AppConfig) {
+  return {
+    jobId: attachment.id,
+    customerName: attachment.senderName,
+    customerPhone: attachment.senderPhone,
+    fileName: attachment.fileName,
+    fileType: attachment.extension,
+    fileSizeBytes: attachment.sizeBytes,
+    printerName: config.printerName,
+    computerName: os.hostname()
+  };
 }
