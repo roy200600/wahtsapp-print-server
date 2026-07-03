@@ -101,6 +101,7 @@ Assert-FileExists "docs\QA-1.0.32.md"
 Assert-FileExists "docs\QA-1.0.33.md"
 Assert-FileExists "docs\QA-1.0.34.md"
 Assert-FileExists "docs\QA-1.0.35.md"
+Assert-FileExists "docs\QA-1.0.36.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -397,6 +398,16 @@ const haystack = `${description}\n${JSON.stringify(details)}`;
 for (const expected of ['Command failed', 'powershell.exe', 'Ghostscript', 'SumatraPDF', '7', 'Technical details']) {
   if (!haystack.includes(expected)) {
     console.error({ missing: expected, description, details });
+    process.exit(1);
+  }
+}
+
+const emptyDescription = describeError({});
+const emptyDetails = errorDetailsForAlert({});
+const emptyHaystack = `${emptyDescription}\n${JSON.stringify(emptyDetails)}`;
+for (const expected of ['Unknown non-Error object was thrown.', 'constructorName', 'Technical details']) {
+  if (!emptyHaystack.includes(expected)) {
+    console.error({ missing: expected, emptyDescription, emptyDetails });
     process.exit(1);
   }
 }

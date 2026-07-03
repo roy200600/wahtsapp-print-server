@@ -65,6 +65,11 @@ export function errorDetailsForAlert(error: unknown): Record<string, unknown> {
     const fallback = safeJson(record);
     if (fallback !== "{}") {
       details.errorJson = trimLong(fallback);
+    } else {
+      details.message = "Unknown non-Error object was thrown.";
+      details.type = Object.prototype.toString.call(error);
+      details.constructorName = constructorName(error);
+      details.note = "The thrown value did not expose message, command, stdout, stderr, code, or stack details.";
     }
   }
 
@@ -104,4 +109,12 @@ function trimLong(value: string): string {
     return value;
   }
   return `${value.slice(0, maxLength)}... [truncated]`;
+}
+
+function constructorName(value: unknown): string {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return typeof value;
+  }
+  const name = (value as { constructor?: { name?: string } }).constructor?.name;
+  return name && name.trim() ? name : "unknown";
 }
