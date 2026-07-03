@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Rubik";
+  src: url("/assets/fonts/Rubik-Variable.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --primary: #2563eb;
   --primary-2: #1d4ed8;
@@ -2101,5 +2109,370 @@ td {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Stable layout layer: keeps the rollback UI tidy while preserving all behavior. */
+:root {
+  --side-nav-width: 232px;
+  --footer-height: 62px;
+  --radius: 12px;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "Rubik", "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.app-shell {
+  direction: ltr;
+  width: 100%;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--side-nav-width);
+  grid-template-areas: "main nav";
+  gap: 14px;
+  padding: 14px 14px calc(var(--footer-height) + 14px);
+}
+
+.side-nav {
+  grid-area: nav;
+  direction: rtl;
+  position: sticky;
+  top: 14px;
+  width: auto;
+  height: calc(100dvh - var(--footer-height) - 28px);
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 12px;
+}
+
+.main-area {
+  grid-area: main;
+  direction: rtl;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.app-header {
+  top: 14px;
+  min-height: 82px;
+  margin: 0;
+  padding: 16px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-title {
+  flex: 1 1 340px;
+  min-width: min(100%, 280px);
+}
+
+.header-title h1 {
+  font-size: clamp(25px, 2vw, 34px);
+  line-height: 1.15;
+}
+
+.header-title p,
+.ops-heading p,
+.ops-panel-header p,
+.ops-detail-list span,
+.ops-alert-list span {
+  font-weight: 400;
+}
+
+.header-actions {
+  flex: 0 1 620px;
+  min-width: min(100%, 280px);
+  justify-content: flex-start;
+}
+
+.header-actions .btn,
+.language-select {
+  min-height: 40px;
+  height: 40px;
+  white-space: nowrap;
+}
+
+.page-host,
+.ops-dashboard,
+.ops-queue-panel,
+.settings-panel {
+  min-width: 0;
+}
+
+.glass-panel,
+.panel,
+.login-card,
+.btn,
+.language-select,
+.icon-btn,
+.footer-icon-btn,
+.table-wrap {
+  border-radius: var(--radius);
+}
+
+.ops-dashboard {
+  gap: 14px;
+}
+
+.ops-command-center {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  gap: 14px;
+  padding: 18px;
+}
+
+.ops-heading h2 {
+  font-size: clamp(28px, 2.6vw, 40px);
+}
+
+.ops-status-grid {
+  grid-template-columns: repeat(4, minmax(145px, 1fr));
+}
+
+.ops-status-card {
+  min-height: 104px;
+  padding: 12px;
+}
+
+.ops-kpi-grid {
+  grid-template-columns: repeat(6, minmax(145px, 1fr));
+  gap: 12px;
+}
+
+.ops-kpi-card {
+  min-height: 116px;
+  padding: 14px;
+}
+
+.ops-kpi-card strong {
+  font-size: clamp(24px, 2.4vw, 34px);
+}
+
+.ops-main-grid {
+  direction: ltr;
+  grid-template-columns: minmax(310px, 0.34fr) minmax(0, 1fr);
+  grid-template-areas: "side queue";
+  gap: 14px;
+}
+
+.ops-queue-panel {
+  grid-area: queue;
+  direction: rtl;
+}
+
+.ops-side-stack {
+  grid-area: side;
+  direction: rtl;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ops-panel-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ops-toolbar {
+  gap: 8px;
+}
+
+.ops-table-wrap {
+  max-width: 100%;
+  max-height: calc(100dvh - 392px);
+  min-height: 320px;
+  overflow: auto;
+}
+
+.ops-jobs-table {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.ops-jobs-table th,
+.ops-jobs-table td {
+  padding: 10px 12px;
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+
+.ops-jobs-table th:nth-child(1),
+.ops-jobs-table td:nth-child(1) { width: 92px; }
+
+.ops-jobs-table th:nth-child(2),
+.ops-jobs-table td:nth-child(2) { width: 280px; }
+
+.ops-jobs-table th:nth-child(3),
+.ops-jobs-table td:nth-child(3) { width: 180px; }
+
+.ops-jobs-table th:nth-child(4),
+.ops-jobs-table td:nth-child(4) { width: 72px; }
+
+.ops-jobs-table th:nth-child(5),
+.ops-jobs-table td:nth-child(5) { width: 92px; }
+
+.ops-jobs-table th:nth-child(6),
+.ops-jobs-table td:nth-child(6) { width: 190px; }
+
+.ops-jobs-table th:nth-child(7),
+.ops-jobs-table td:nth-child(7) { width: 132px; }
+
+.ops-jobs-table th:nth-child(8),
+.ops-jobs-table td:nth-child(8) { width: 90px; }
+
+.ops-file-cell strong,
+.ops-file-cell small,
+.ops-jobs-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ops-file-cell strong,
+.ops-file-cell small {
+  max-width: 100%;
+}
+
+.ops-qr-box {
+  min-height: 172px;
+}
+
+.ops-detail-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-footer {
+  direction: rtl;
+  height: var(--footer-height);
+  min-height: var(--footer-height);
+  padding: 8px 18px;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.footer-center {
+  min-width: 0;
+  text-align: center;
+}
+
+.footer-center p {
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+
+.footer-logo {
+  justify-content: flex-start;
+}
+
+.footer-icons {
+  justify-content: flex-end;
+}
+
+@media (max-width: 1440px) {
+  :root {
+    --side-nav-width: 216px;
+  }
+
+  .ops-command-center {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-main-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "queue"
+      "side";
+  }
+
+  .ops-side-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .ops-status-grid,
+  .ops-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ops-side-stack {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "nav"
+      "main";
+    padding: 12px 12px 18px;
+  }
+
+  .side-nav {
+    position: static;
+    height: auto;
+  }
+
+  .nav-list {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    min-width: 58px;
+  }
+
+  .app-header {
+    position: static;
+  }
+
+  .ops-status-grid,
+  .ops-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-footer {
+    position: static;
+    grid-template-columns: 1fr;
+    height: auto;
+    margin-top: 14px;
+  }
+
+  .footer-logo,
+  .footer-icons {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 620px) {
+  .header-actions > *,
+  .ops-toolbar .btn {
+    flex: 1 1 100%;
+  }
+
+  .ops-status-grid,
+  .ops-kpi-grid,
+  .ops-detail-list {
+    grid-template-columns: 1fr;
   }
 }

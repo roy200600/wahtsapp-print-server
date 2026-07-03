@@ -1,11 +1,12 @@
-const CACHE_NAME = "my-pc-print-server-v1-0-16";
+const CACHE_NAME = "my-pc-print-server-v1-0-17";
 const APP_SHELL = [
   "/",
   "/styles.css",
   "/app.js",
   "/manifest.webmanifest",
   "/assets/my-pc-logo-white.png",
-  "/assets/my-pc-logo-blue.png"
+  "/assets/my-pc-logo-blue.png",
+  "/assets/fonts/Rubik-Variable.ttf"
 ];
 
 self.addEventListener("install", (event) => {
