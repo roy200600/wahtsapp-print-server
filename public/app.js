@@ -1,4 +1,5 @@
-const APP_VERSION = "1.0.43";
+const APP_VERSION = "1.0.44";
+const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
 
 const state = {
   authenticated: false,
@@ -1770,6 +1771,21 @@ function bindDiagnostics() {
   });
 }
 
+function isVersionAtLeast(current, minimum) {
+  const currentParts = String(current || "0").split(".").map((part) => Number(part) || 0);
+  const minimumParts = String(minimum || "0").split(".").map((part) => Number(part) || 0);
+  const length = Math.max(currentParts.length, minimumParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const currentValue = currentParts[index] || 0;
+    const minimumValue = minimumParts[index] || 0;
+    if (currentValue > minimumValue) return true;
+    if (currentValue < minimumValue) return false;
+  }
+
+  return true;
+}
+
 async function downloadCustomerQaReport() {
   setLoading(true, "מפיק דוח QA...");
   try {
@@ -1779,17 +1795,47 @@ async function downloadCustomerQaReport() {
       api("/api/printers/details").catch((error) => ({ error: error.message || String(error) })),
       api("/api/log-files").catch(() => [])
     ]);
+    const serverVersion = status.version || "";
+    const serverVersionCheck = isVersionAtLeast(serverVersion, MINIMUM_DIAGNOSTICS_VERSION)
+      ? isVersionAtLeast(serverVersion, APP_VERSION)
+        ? {
+            name: "serverVersion",
+            status: "passed",
+            message: "Server version is current for this QA report."
+          }
+        : {
+            name: "serverVersion",
+            status: "warning",
+            message: "Server is compatible, but not on the latest recommended version."
+          }
+      : {
+          name: "serverVersion",
+          status: "failed",
+          message: "Server version is too old for print-engine diagnostics. Update or restart the customer installation."
+        };
 
     const report = {
       type: "my-pc-whatsapp-print-customer-qa",
       generatedAt: new Date().toISOString(),
       browserTime: new Date().toLocaleString("he-IL"),
+      minimumDiagnosticsVersion: MINIMUM_DIAGNOSTICS_VERSION,
+      recommendedVersion: APP_VERSION,
       server: {
-        version: status.version || "",
+        version: serverVersion,
         whatsappConnected: Boolean(status.whatsapp?.connected),
         selectedPrinter: status.config?.printerName || "",
         licenseMode: status.license?.mode || ""
       },
+      checks: [
+        {
+          ...serverVersionCheck,
+          details: {
+            currentVersion: serverVersion,
+            minimumDiagnosticsVersion: MINIMUM_DIAGNOSTICS_VERSION,
+            recommendedVersion: APP_VERSION
+          }
+        }
+      ],
       printEngines: engines,
       printers: Array.isArray(printers) ? printers.map((printer) => ({
         name: printer.name,
