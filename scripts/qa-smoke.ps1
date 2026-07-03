@@ -48,6 +48,7 @@ Assert-FileExists "public\assets\fonts\Rubik-Variable.ttf"
 Assert-FileExists "tools\SumatraPDF\SumatraPDF.exe"
 Assert-FileExists "docs\QA-1.0.19.md"
 Assert-FileExists "docs\QA-1.0.21.md"
+Assert-FileExists "docs\QA-1.0.22.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -65,8 +66,48 @@ Test-PowerShellSyntax @(
 Test-TextContains "public\index.html" "/styles.css?v="
 Test-TextContains "public\index.html" "/app.js?v="
 Test-TextContains "public\styles.css" "Rubik-Variable.ttf"
+Test-TextContains "public\styles.css" ":focus-visible"
+Test-TextContains "public\styles.css" "prefers-reduced-motion"
+Test-TextContains "public\styles.css" "overflow-x: hidden"
+Test-TextContains "public\styles.css" "@media (max-width:"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-sPDFPassword"
+Test-TextContains "scripts\print-pdf-profile.ps1" "DryRun"
+
+$hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
+$dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")
+Set-Content -LiteralPath $dryRunPdf -Encoding ASCII -Value "%PDF-1.4`ntrailer <<>>"
+
+try {
+  $dryRunOutput = & ".\scripts\print-pdf-profile.ps1" `
+    -FilePath $dryRunPdf `
+    -PrinterName "QA Printer (USB)" `
+    -SumatraPath "tools\SumatraPDF\SumatraPDF.exe" `
+    -ColorMode grayscale `
+    -DuplexMode simplex `
+    -Orientation auto `
+    -PaperSize A4 `
+    -Scaling fill-page `
+    -ScalePercent 90 `
+    -Copies 1 `
+    -Dpi 600 `
+    -Quality high `
+    -CompatibilityMode true `
+    -DryRun
+
+  $dryRunResult = $dryRunOutput | ConvertFrom-Json
+  if (-not $dryRunResult.ok) {
+    throw "PDF dry-run did not return ok."
+  }
+  if (-not [System.IO.Path]::IsPathRooted([string]$dryRunResult.sumatraPath)) {
+    throw "PDF dry-run did not resolve a rooted SumatraPDF path."
+  }
+  if ([string]$dryRunResult.commandLine -notmatch [regex]::Escape('"QA Printer (USB)"')) {
+    throw "PDF dry-run did not quote a printer name with spaces and parentheses."
+  }
+} finally {
+  Remove-Item -LiteralPath $dryRunPdf -Force -ErrorAction SilentlyContinue
+}
 
 $pdfSecuritySmoke = @'
 const m = await import('./dist/pdfSecurity.js');

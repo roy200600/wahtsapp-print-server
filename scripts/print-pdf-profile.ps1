@@ -32,7 +32,9 @@ param(
   [ValidateSet("draft", "normal", "high")]
   [string]$Quality = "high",
 
-  [string]$CompatibilityMode = "true"
+  [string]$CompatibilityMode = "true",
+
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,9 +51,11 @@ if (-not [System.IO.Path]::IsPathRooted($SumatraPath)) {
   }
 }
 
-$printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
-if (-not $printer) {
-  throw "Printer not found: $PrinterName"
+if (-not $DryRun) {
+  $printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
+  if (-not $printer) {
+    throw "Printer not found: $PrinterName"
+  }
 }
 
 $safeCopies = [Math]::Max(1, [Math]::Min(99, $Copies))
@@ -576,6 +580,54 @@ function Send-WithSumatra {
   } finally {
     Remove-Item -LiteralPath $safePdf.Directory -Recurse -Force -ErrorAction SilentlyContinue
   }
+}
+
+function Test-SumatraDryRun {
+  if (-not (Test-Path -LiteralPath $SumatraPath)) {
+    throw "SumatraPDF not found: $SumatraPath"
+  }
+
+  $sumatraSettings = @(
+    "$($safeCopies)x",
+    $(Convert-SumatraDuplex $DuplexMode),
+    $(if ($ColorMode -eq "color") { "color" } else { "monochrome" }),
+    $(Convert-SumatraScaling $Scaling)
+  )
+
+  $settings = ($sumatraSettings | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+  $safePdf = New-SumatraSafePdfCopy
+
+  try {
+    $arguments = @(
+      "-silent",
+      "-print-to",
+      $PrinterName,
+      "-print-settings",
+      $settings,
+      $safePdf.FilePath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($PdfPassword)) {
+      $arguments = @("-pwd", $PdfPassword) + $arguments
+    }
+
+    [pscustomobject]@{
+      ok = $true
+      printerName = $PrinterName
+      sumatraPath = $SumatraPath
+      settings = $settings
+      safePdf = $safePdf.FilePath
+      arguments = $arguments
+      commandLine = Join-ProcessArguments $arguments
+    } | ConvertTo-Json -Depth 5
+  } finally {
+    Remove-Item -LiteralPath $safePdf.Directory -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+if ($DryRun) {
+  Test-SumatraDryRun
+  exit 0
 }
 
 Apply-DriverProfile
