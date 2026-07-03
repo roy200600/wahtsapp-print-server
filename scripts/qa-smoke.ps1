@@ -103,6 +103,7 @@ Assert-FileExists "docs\QA-1.0.34.md"
 Assert-FileExists "docs\QA-1.0.35.md"
 Assert-FileExists "docs\QA-1.0.36.md"
 Assert-FileExists "docs\QA-1.0.37.md"
+Assert-FileExists "docs\QA-1.0.38.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -507,13 +508,19 @@ const os = await import('node:os');
 const path = await import('node:path');
 const { PrintOrderManager } = await import('./dist/printOrders.js');
 const { defaultConfig } = await import('./dist/config.js');
-const { databasePath, appPaths } = await import('./dist/paths.js');
+const configModule = await import('./dist/config.js');
+const alerts = await import('./dist/alerts.js');
+const { databasePath, appPaths, settingsPath } = await import('./dist/paths.js');
 
 const sourcePdf = process.argv.at(-1);
 const dbHadContent = fs.existsSync(databasePath);
 const dbBackup = dbHadContent ? fs.readFileSync(databasePath) : undefined;
+const settingsHadContent = fs.existsSync(settingsPath);
+const settingsBackup = settingsHadContent ? fs.readFileSync(settingsPath) : undefined;
 const runId = `qa-password-flow-${Date.now()}`;
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mypc-order-flow-'));
+const managerAlertPhone = '972501234567';
+const ownerAlertPhone = '972522250223';
 
 function config() {
   return {
@@ -562,9 +569,28 @@ function cleanupManager(manager) {
   orders.clear();
 }
 
+async function waitForAlerts(sent, count) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 3000) {
+    if (sent.length >= count) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 try {
   fs.mkdirSync(appPaths.failedDir, { recursive: true });
   fs.mkdirSync(appPaths.downloadsDir, { recursive: true });
+  configModule.saveConfig({
+    ...defaultConfig,
+    printerName: 'QA Printer',
+    alertsEnabled: true,
+    alertsPhone: managerAlertPhone,
+    allowedNumbers: [],
+    allowedGroups: []
+  });
+
+  const alertMessages = [];
+  alerts.registerAlertSender(async (phone, text) => alertMessages.push({ phone, text }));
 
   const wrongPdf = path.join(tempDir, `${runId}-wrong.pdf`);
   const rightPdf = path.join(tempDir, `${runId}-right.pdf`);
@@ -585,6 +611,22 @@ try {
   if (!wrongHandled || wrongOrderStillExists || !wrongMessages.includes('FAILED')) {
     console.error({ stage: 'wrong-password-flow', wrongHandled, wrongOrderStillExists, wrongMessages });
     process.exit(1);
+  }
+
+  await waitForAlerts(alertMessages, 2);
+  const alertPhones = alertMessages.map((message) => message.phone).sort();
+  const alertText = alertMessages.map((message) => message.text).join('\n---\n');
+  for (const expected of [managerAlertPhone, ownerAlertPhone]) {
+    if (!alertPhones.includes(expected)) {
+      console.error({ stage: 'password-alert-recipients', missing: expected, alertPhones, alertMessages });
+      process.exit(1);
+    }
+  }
+  for (const expected of [`${runId}-wrong.pdf`, 'QA Customer', '972500000000', 'QA Printer', 'PDF password is missing or incorrect.']) {
+    if (!alertText.includes(expected)) {
+      console.error({ stage: 'password-alert-details', missing: expected, alertText });
+      process.exit(1);
+    }
   }
   cleanupManager(wrongManager);
 
@@ -612,6 +654,12 @@ try {
     fs.writeFileSync(databasePath, dbBackup);
   } else if (fs.existsSync(databasePath)) {
     fs.rmSync(databasePath, { force: true });
+  }
+
+  if (settingsHadContent) {
+    fs.writeFileSync(settingsPath, settingsBackup);
+  } else if (fs.existsSync(settingsPath)) {
+    fs.rmSync(settingsPath, { force: true });
   }
 }
 '@
