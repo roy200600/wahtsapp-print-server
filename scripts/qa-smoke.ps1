@@ -102,6 +102,7 @@ Assert-FileExists "docs\QA-1.0.40.md"
 Assert-FileExists "docs\QA-1.0.41.md"
 Assert-FileExists "docs\QA-1.0.42.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
+Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
 
 Test-PowerShellSyntax @(
@@ -114,7 +115,8 @@ Test-PowerShellSyntax @(
   "scripts\count-pages.ps1",
   "scripts\start-windows.ps1",
   "scripts\install-windows.ps1",
-  "scripts\update-windows.ps1"
+  "scripts\update-windows.ps1",
+  "scripts\customer-qa.ps1"
 )
 
 Test-TextContains "public\index.html" "/styles.css?v="
@@ -186,6 +188,9 @@ Test-TextContains "src\errorDetails.ts" "Technical details"
 Test-TextContains "src\printOrders.ts" "this.orders.delete(order.phone)"
 Test-TextContains "src\printOrders.ts" "Customer message skipped because WhatsApp is disconnected"
 Test-TextContains "src\printOrders.ts" "sendFailureWarningThrottleMs"
+Test-TextContains "scripts\customer-qa.ps1" "/api/diagnostics/print-engines"
+Test-TextContains "scripts\customer-qa.ps1" "customer-qa-"
+Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" "It does not print a test page"
 
 $uiStaticSmoke = @'
 const fs = await import('node:fs');
