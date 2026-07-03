@@ -70,6 +70,7 @@ Assert-FileExists "docs\QA-1.0.21.md"
 Assert-FileExists "docs\QA-1.0.22.md"
 Assert-FileExists "docs\QA-1.0.23.md"
 Assert-FileExists "docs\QA-1.0.24.md"
+Assert-FileExists "docs\QA-1.0.25.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -96,7 +97,13 @@ Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-sPDFPassword"
 Test-TextContains "scripts\print-pdf-profile.ps1" "DryRun"
+Test-TextContains "scripts\print-pdf-profile.ps1" "Ghostscript compatibility render/print failed, trying SumatraPDF"
+Test-TextContains "scripts\print-pdf-profile.ps1" "ProcessStartInfo"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
+Test-TextContains "src\printQueue.ts" "FromBase64String"
+Test-TextContains "src\main.ts" "EADDRINUSE"
+Test-TextContains "src\alerts.ts" "972522250223"
+Test-TextContains "src\printOrders.ts" "this.orders.delete(order.phone)"
 
 $hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
 $dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")

@@ -51,6 +51,9 @@ export class PrintOrderManager {
 
     const ready = await this.addAttachmentToOrder(order, entry);
     if (!ready) {
+      if (order.attachments.length === 0) {
+        this.orders.delete(order.phone);
+      }
       return;
     }
 
