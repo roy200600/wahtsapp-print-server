@@ -1,6 +1,9 @@
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import { loadConfig } from "./config.js";
 import { logger } from "./logger.js";
+import { rootDir } from "./paths.js";
 
 type AlertSender = (phone: string, text: string) => Promise<void>;
 
@@ -80,6 +83,7 @@ export function formatSystemAlert(type: string, description: string, context?: S
     field("מדפסת", context?.printerName),
     field("שרת", context?.serverName),
     field("מחשב", context?.computerName ?? os.hostname()),
+    field("App version", getAppVersion()),
     ...Object.entries(context?.extra ?? {}).map(([key, value]) => field(key, stringifyValue(value)))
   ].filter(Boolean) as string[];
 
@@ -121,4 +125,13 @@ function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${bytes} B`;
+}
+
+function getAppVersion(): string {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8")) as { version?: string };
+    return String(packageJson.version || "").trim();
+  } catch {
+    return "";
+  }
 }

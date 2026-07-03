@@ -95,6 +95,7 @@ Assert-FileExists "docs\QA-1.0.26.md"
 Assert-FileExists "docs\QA-1.0.27.md"
 Assert-FileExists "docs\QA-1.0.28.md"
 Assert-FileExists "docs\QA-1.0.29.md"
+Assert-FileExists "docs\QA-1.0.30.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -144,6 +145,7 @@ Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPat
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\alerts.ts" "972522250223"
+Test-TextContains "src\alerts.ts" "App version"
 Test-TextContains "src\errorDetails.ts" "cmd"
 Test-TextContains "src\errorDetails.ts" "stdout"
 Test-TextContains "src\errorDetails.ts" "stderr"
@@ -255,7 +257,9 @@ if (!results.every(Boolean)) {
 Invoke-NodeSmoke "PDF security smoke" $pdfSecuritySmoke
 
 $alertsSmoke = @'
+const fs = await import('node:fs');
 const alerts = await import('./dist/alerts.js');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const text = alerts.formatSystemAlert('Printer Offline', 'Unable to contact printer.', {
   jobId: 'job-123',
   customerName: 'Leon',
@@ -269,7 +273,7 @@ const text = alerts.formatSystemAlert('Printer Offline', 'Unable to contact prin
   extra: { reason: 'Queue error' }
 });
 
-for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-123', 'Leon', '972500000000', 'invoice.pdf', 'pdf', '1.5 KB', 'Olivetti d-Copia 400 KX (USB)', 'WIN11-PC', 'Queue error']) {
+for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-123', 'Leon', '972500000000', 'invoice.pdf', 'pdf', '1.5 KB', 'Olivetti d-Copia 400 KX (USB)', 'WIN11-PC', 'Queue error', pkg.version, 'App version']) {
   if (!text.includes(expected)) {
     console.error({ missing: expected, text });
     process.exit(1);

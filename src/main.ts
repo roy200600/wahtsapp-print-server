@@ -9,6 +9,7 @@ import { getLicenseStatus } from "./license.js";
 import { appPaths } from "./paths.js";
 import { recoverInterruptedJobs } from "./db.js";
 import { stopPrintQueue } from "./printQueue.js";
+import { describeError } from "./errorDetails.js";
 
 ensureDirectories();
 
@@ -39,7 +40,7 @@ void recoverStartupState().finally(() => {
   if (licenseStatus.canRun) {
     void whatsapp.start().catch((error) => {
       logger.error({ err: error }, "WhatsApp failed to start");
-      sendSystemAlert("כשל בחיבור ל־WhatsApp", error instanceof Error ? error.message : String(error));
+      sendSystemAlert("כשל בחיבור ל־WhatsApp", describeError(error));
     });
   } else {
     logger.warn({ licenseStatus }, "WhatsApp auto-start blocked by license status");
@@ -64,13 +65,12 @@ setInterval(() => {
 
 process.on("uncaughtException", (error) => {
   logger.error({ err: error }, "Unhandled exception");
-  sendSystemAlert("חריגה (Unhandled Exception)", error.message);
+  sendSystemAlert("חריגה (Unhandled Exception)", describeError(error));
 });
 
 process.on("unhandledRejection", (reason) => {
-  const message = reason instanceof Error ? reason.message : String(reason);
   logger.error({ reason }, "Unhandled rejection");
-  sendSystemAlert("כל Error שלא נתפס (Unhandled Error)", message);
+  sendSystemAlert("כל Error שלא נתפס (Unhandled Error)", describeError(reason));
 });
 
 async function recoverStartupState(): Promise<void> {
