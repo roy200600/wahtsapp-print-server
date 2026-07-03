@@ -104,6 +104,7 @@ Assert-FileExists "docs\QA-1.0.35.md"
 Assert-FileExists "docs\QA-1.0.36.md"
 Assert-FileExists "docs\QA-1.0.37.md"
 Assert-FileExists "docs\QA-1.0.38.md"
+Assert-FileExists "docs\QA-1.0.39.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -162,6 +163,9 @@ Test-TextContains "scripts\update-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\update-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\start-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\start-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
+Test-TextContains "scripts\start-windows.ps1" "Stop-StaleProjectServer"
+Test-TextContains "scripts\start-windows.ps1" "Get-NetTCPConnection"
+Test-TextContains "scripts\start-windows.ps1" "already in use by another process"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
 Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only"
 Test-TextContains "src\printQueue.ts" "FromBase64String"

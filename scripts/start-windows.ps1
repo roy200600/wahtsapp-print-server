@@ -107,6 +107,57 @@ function Test-ServerRunning($Port) {
   }
 }
 
+function Get-PortOwnerProcesses($Port) {
+  try {
+    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    $processIds = @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
+    if ($processIds.Count -eq 0) {
+      return @()
+    }
+
+    return @(Get-CimInstance Win32_Process |
+      Where-Object { $processIds -contains $_.ProcessId })
+  } catch {
+    return @()
+  }
+}
+
+function Test-ProjectServerProcess($Process) {
+  $commandLine = [string]$Process.CommandLine
+  if (-not $commandLine) {
+    return $false
+  }
+
+  $normalizedCommand = $commandLine.ToLowerInvariant()
+  $normalizedRoot = $ProjectRoot.ToLowerInvariant()
+  return (
+    $normalizedCommand.Contains("dist\main.js") -and
+    $normalizedCommand.Contains($normalizedRoot)
+  )
+}
+
+function Stop-StaleProjectServer($Port) {
+  $owners = @(Get-PortOwnerProcesses $Port)
+  if ($owners.Count -eq 0) {
+    return
+  }
+
+  $staleOwners = @($owners | Where-Object { Test-ProjectServerProcess $_ })
+  if ($staleOwners.Count -eq 0) {
+    $ownerText = ($owners | ForEach-Object { "$($_.Name) PID $($_.ProcessId)" }) -join ", "
+    throw "Port $Port is already in use by another process: $ownerText"
+  }
+
+  foreach ($owner in $staleOwners) {
+    Write-Host "Stopping stale MY-PC server process: PID $($owner.ProcessId)"
+    try {
+      Stop-Process -Id $owner.ProcessId -Force -ErrorAction SilentlyContinue
+    } catch {}
+  }
+
+  Start-Sleep -Seconds 2
+}
+
 function Initialize-SumatraPdf($ProjectRoot) {
   $SumatraDir = Join-Path $ProjectRoot "tools\SumatraPDF"
   $SumatraExe = Join-Path $SumatraDir "SumatraPDF.exe"
@@ -184,6 +235,8 @@ if (Test-ServerRunning $ConfiguredPort) {
   }
   return
 }
+
+Stop-StaleProjectServer $ConfiguredPort
 
 $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
