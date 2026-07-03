@@ -2439,6 +2439,26 @@ body {
   justify-content: flex-end;
 }
 
+.panel,
+.btn,
+.nav-item,
+.toast,
+.footer-center,
+.ops-status-card,
+.ops-kpi-card,
+.engine-status-card,
+.license-status-card {
+  overflow-wrap: anywhere;
+}
+
+.btn span,
+.nav-item span,
+.status-pill,
+.job-status,
+.ops-action {
+  min-width: 0;
+}
+
 @media (max-width: 1440px) {
   :root {
     --side-nav-width: 216px;

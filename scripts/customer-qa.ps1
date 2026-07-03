@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $MinimumDiagnosticsVersion = "1.0.42"
-$RecommendedVersion = "1.0.55"
+$RecommendedVersion = "1.0.56"
 
 function Add-Check {
   param(
@@ -216,6 +216,106 @@ $missingPaths = @($paths | Where-Object { -not $_.exists })
 Add-Check "paths" ($(if ($missingPaths.Count -eq 0) { "passed" } else { "warning" })) "Project folder path check completed." @{
   paths = $paths
   missing = $missingPaths
+}
+
+$pdfPasswordFixture = Join-Path $ProjectRoot "tests\fixtures\encrypted-password-312830714.pdf"
+$pdfProfileScript = Join-Path $ProjectRoot "scripts\print-pdf-profile.ps1"
+$sumatraPath = Join-Path $ProjectRoot "tools\SumatraPDF\SumatraPDF.exe"
+if ($status.ok -and $status.value.config.sumatraPdfPath) {
+  $configuredSumatra = [string]$status.value.config.sumatraPdfPath
+  if (-not [string]::IsNullOrWhiteSpace($configuredSumatra)) {
+    if ([System.IO.Path]::IsPathRooted($configuredSumatra)) {
+      $sumatraPath = $configuredSumatra
+    } else {
+      $sumatraPath = Join-Path $ProjectRoot $configuredSumatra
+    }
+  }
+}
+
+if (-not (Test-Path -LiteralPath $pdfPasswordFixture)) {
+  Add-Check "encryptedPdfDryRun" "warning" "Encrypted PDF QA fixture is missing. Physical password-PDF testing is still required." @{
+    fixture = $pdfPasswordFixture
+  }
+} elseif (-not (Test-Path -LiteralPath $pdfProfileScript)) {
+  Add-Check "encryptedPdfDryRun" "failed" "PDF profile print script is missing." @{
+    script = $pdfProfileScript
+  }
+} elseif (-not (Test-Path -LiteralPath $sumatraPath)) {
+  Add-Check "encryptedPdfDryRun" "failed" "SumatraPDF is missing for encrypted PDF dry-run." @{
+    sumatraPath = $sumatraPath
+  }
+} else {
+  $dryRunPrinterName = "MY-PC QA DryRun Printer ({0})" -f [System.Guid]::NewGuid().ToString("N")
+  try {
+    $dryRunOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $pdfProfileScript `
+      -FilePath $pdfPasswordFixture `
+      -PrinterName $dryRunPrinterName `
+      -SumatraPath $sumatraPath `
+      -ColorMode grayscale `
+      -DuplexMode simplex `
+      -Orientation auto `
+      -PaperSize A4 `
+      -Scaling fill-page `
+      -ScalePercent 90 `
+      -Copies 1 `
+      -Dpi 600 `
+      -Quality high `
+      -CompatibilityMode true `
+      -PdfPassword "312830714" `
+      -DryRun | Out-String
+    $dryRun = $dryRunOutput | ConvertFrom-Json
+    $dryRunArguments = @($dryRun.arguments | ForEach-Object { [string]$_ })
+    $maskedDryRunArguments = @()
+    for ($i = 0; $i -lt $dryRunArguments.Count; $i++) {
+      if ($i -gt 0 -and $dryRunArguments[$i - 1] -eq "-pwd") {
+        $maskedDryRunArguments += "********"
+      } else {
+        $maskedDryRunArguments += $dryRunArguments[$i]
+      }
+    }
+    $maskedCommandLine = ([string]$dryRun.commandLine).Replace("312830714", "********")
+    $hasPasswordArguments = $dryRunArguments -contains "-pwd" -and $dryRunArguments -contains "312830714"
+    $usesDryRunPrinter = $dryRun.printerName -eq $dryRunPrinterName -and $dryRunArguments -contains $dryRunPrinterName
+    $doesNotTargetSelectedPrinter = [string]::IsNullOrWhiteSpace($selectedPrinterName) -or -not ($dryRunArguments -contains $selectedPrinterName)
+    $dryRunPrinterExists = $false
+    if ($printers.ok) {
+      $dryRunPrinterExists = @($printerRows | Where-Object { $_.name -eq $dryRunPrinterName }).Count -gt 0
+    }
+
+    if ($dryRun.ok -and $hasPasswordArguments -and $usesDryRunPrinter -and $doesNotTargetSelectedPrinter -and -not $dryRunPrinterExists) {
+      Add-Check "encryptedPdfDryRun" "passed" "Encrypted PDF dry-run succeeded without printing." @{
+        dryRunPrinterName = $dryRunPrinterName
+        selectedPrinterName = $selectedPrinterName
+        dryRunPrinterExists = $dryRunPrinterExists
+        sumatraPath = $dryRun.sumatraPath
+        arguments = $maskedDryRunArguments
+        commandLine = $maskedCommandLine
+        physicalPrintGuard = "Uses -DryRun with a non-existent sentinel printer name; if dry-run is removed, printer validation fails before printing."
+      }
+    } else {
+      Add-Check "encryptedPdfDryRun" "failed" "Encrypted PDF dry-run did not prove the password arguments and no-physical-print guard." @{
+        output = @{
+          ok = $dryRun.ok
+          printerName = $dryRun.printerName
+          sumatraPath = $dryRun.sumatraPath
+          arguments = $maskedDryRunArguments
+          commandLine = $maskedCommandLine
+        }
+        expectedDryRunPrinterName = $dryRunPrinterName
+        selectedPrinterName = $selectedPrinterName
+        hasPasswordArguments = $hasPasswordArguments
+        usesDryRunPrinter = $usesDryRunPrinter
+        doesNotTargetSelectedPrinter = $doesNotTargetSelectedPrinter
+        dryRunPrinterExists = $dryRunPrinterExists
+      }
+    }
+  } catch {
+    Add-Check "encryptedPdfDryRun" "failed" "Encrypted PDF dry-run failed." @{
+      error = $_.Exception.Message
+      fixture = $pdfPasswordFixture
+      sumatraPath = $sumatraPath
+    }
+  }
 }
 
 $nodeVersion = $null

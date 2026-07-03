@@ -203,8 +203,9 @@ function startupScriptContent(): string {
     "$project = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path",
     "Set-Location -LiteralPath $project",
     "$startScript = Join-Path $project 'scripts\\start-windows.ps1'",
+    "$startScriptArgument = '\"' + $startScript + '\"'",
     "$powershell = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'",
-    "Start-Process -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', $startScript, '-Hidden') -WorkingDirectory $project -WindowStyle Hidden"
+    "Start-Process -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', $startScriptArgument, '-Hidden') -WorkingDirectory $project -WindowStyle Hidden"
   ].join("\r\n");
 }
 

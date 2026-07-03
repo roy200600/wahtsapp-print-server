@@ -225,21 +225,26 @@ function Initialize-SumatraPdf($ProjectRoot) {
   Write-Host "SumatraPDF was not found. Downloading portable SumatraPDF..."
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   New-Item -ItemType Directory -Force -Path $SumatraDir | Out-Null
-  $SumatraZip = Join-Path $env:TEMP "SumatraPDF-3.6.1-64.zip"
-  $ExtractRoot = Join-Path $env:TEMP "my-pc-sumatrapdf"
-  if (Test-Path $ExtractRoot) {
-    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+  $SumatraTempDir = Join-Path $env:TEMP ("my-pc-sumatrapdf-" + [System.Guid]::NewGuid().ToString("N"))
+  $SumatraZip = Join-Path $SumatraTempDir "SumatraPDF-3.6.1-64.zip"
+  $ExtractRoot = Join-Path $SumatraTempDir "extract"
+  New-Item -ItemType Directory -Force -Path $SumatraTempDir | Out-Null
+  try {
+    Invoke-WebRequest -Uri "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip" -OutFile $SumatraZip
+    Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+    $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "*.exe" |
+      Where-Object { $_.Name -like "SumatraPDF*.exe" } |
+      Select-Object -First 1
+    if (-not $DownloadedExe) {
+      $ExtractedFiles = (Get-ChildItem $ExtractRoot -Recurse | Select-Object -ExpandProperty Name) -join ", "
+      throw "Could not extract SumatraPDF executable from the portable package. Extracted files: $ExtractedFiles"
+    }
+    Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
+  } finally {
+    if ($SumatraTempDir -and (Test-Path -LiteralPath $SumatraTempDir)) {
+      Remove-Item -LiteralPath $SumatraTempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
-  Invoke-WebRequest -Uri "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip" -OutFile $SumatraZip
-  Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
-  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "*.exe" |
-    Where-Object { $_.Name -like "SumatraPDF*.exe" } |
-    Select-Object -First 1
-  if (-not $DownloadedExe) {
-    $ExtractedFiles = (Get-ChildItem $ExtractRoot -Recurse | Select-Object -ExpandProperty Name) -join ", "
-    throw "Could not extract SumatraPDF executable from the portable package. Extracted files: $ExtractedFiles"
-  }
-  Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
 }
 
 function Initialize-Ghostscript($ProjectRoot) {

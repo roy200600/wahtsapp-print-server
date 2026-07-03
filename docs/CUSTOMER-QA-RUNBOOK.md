@@ -1,6 +1,6 @@
 # Customer QA Runbook
 
-Use this runbook after installing or updating a customer machine to `v1.0.55` or newer.
+Use this runbook after installing or updating a customer machine to `v1.0.56` or newer.
 
 ## Quick Command
 
@@ -30,12 +30,14 @@ logs\customer-qa-YYYYMMDD-HHMMSS.json
 - Windows printer list availability.
 - Whether the selected printer exists in the Windows printer list.
 - Required project folders.
+- Password-protected PDF dry-run with password `312830714`, using a unique fake dry-run printer name so no physical print job is sent.
 - Node.js or bundled Node.js availability.
 - A manual field-validation checklist for the physical print tests.
 
 ## What It Does Not Do
 
 - It does not print a test page.
+- It does not send the encrypted PDF dry-run to the selected customer printer.
 - It does not clear the Windows print queue.
 - It does not send data to MY-PC automatically.
 - It does not change settings.
@@ -48,12 +50,14 @@ After the report is created:
 2. Confirm the report does not show `serverVersion` as failed.
 3. Confirm diagnostics show SumatraPDF available.
 4. Confirm Ghostscript is available or clearly shown as a warning.
-5. Send a normal PDF and confirm paper output.
-6. Send a password-protected PDF and reply with the password.
-7. Send JPG/JPEG/PNG and confirm paper output.
-8. Send DOC/DOCX only if Microsoft Word or a compatible Office app is installed.
-9. Send XLS/XLSX and PPT/PPTX only if Office is installed.
-10. Restart the PC after a queued job and confirm later jobs are not blocked.
+5. Confirm `encryptedPdfDryRun` passed. This proves the password-protected PDF command is built in dry-run mode only.
+6. Send a normal PDF and confirm paper output.
+7. Send a password-protected PDF and reply with the password.
+8. Send the wrong PDF password and confirm no paper output plus system alerts.
+9. Send JPG/JPEG/PNG and confirm paper output.
+10. Send DOC/DOCX only if Microsoft Word or a compatible Office app is installed.
+11. Send XLS/XLSX and PPT/PPTX only if Office is installed.
+12. Restart the PC after a queued job and confirm later jobs are not blocked.
 
 ## Version Meaning
 

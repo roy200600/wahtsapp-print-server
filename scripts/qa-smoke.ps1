@@ -113,7 +113,7 @@ Assert-FileExists "docs\QA-1.0.51.md"
 Assert-FileExists "docs\QA-1.0.52.md"
 Assert-FileExists "docs\QA-1.0.53.md"
 Assert-FileExists "docs\QA-1.0.54.md"
-Assert-FileExists "docs\QA-1.0.55.md"
+Assert-FileExists "docs\QA-1.0.56.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -147,10 +147,13 @@ Test-TextContains "public\styles.css" "@media (max-width:"
 Test-TextContains "public\styles.css" "@media (max-width: 620px)"
 Test-TextContains "public\styles.css" "cursor: pointer"
 Test-TextContains "public\styles.css" "table-layout: fixed"
+Test-TextContains "public\styles.css" "overflow-wrap: anywhere"
 Test-TextContains "public\styles.css" ".printer-profile-tabs"
 Test-TextContains "public\styles.css" ".ops-jobs-table"
 Test-TextContains "public\app.js" "document.documentElement.dir"
 Test-TextContains "public\app.js" "if (window.lucide) window.lucide.createIcons()"
+Test-TextContains "public\app.js" "await loadAll();"
+Test-TextContains "public\app.js" '$("#appShell").classList.remove("hidden");'
 Test-TextContains "public\app.js" "function setOptionalText"
 Test-TextContains "public\app.js" "if (element) element.textContent"
 Test-TextContains "public\app.js" "renderPrinterProfileCards"
@@ -180,9 +183,13 @@ Test-TextContains "scripts\print-pdf-profile.ps1" "tools\Ghostscript"
 Test-TextContains "scripts\print-image.ps1" "DryRun"
 Test-TextContains "scripts\print-text.ps1" "DryRun"
 Test-TextContains "scripts\print-word.ps1" "DryRun"
+Test-TextContains "scripts\print-word.ps1" "my-pc-word-"
+Test-TextContains "scripts\print-word.ps1" 'Copy-Item -LiteralPath $FilePath'
 Test-TextContains "scripts\print-word.ps1" '$document.PrintOut($false)'
 Test-TextContains "scripts\print-word.ps1" "ReleaseComObject"
 Test-TextContains "scripts\print-excel.ps1" "DryRun"
+Test-TextContains "scripts\print-excel.ps1" "my-pc-excel-"
+Test-TextContains "scripts\print-excel.ps1" 'Copy-Item -LiteralPath $FilePath'
 Test-TextContains "scripts\print-excel.ps1" "ReleaseComObject"
 Test-TextContains "scripts\print-powerpoint.ps1" "DryRun"
 Test-TextContains "scripts\print-powerpoint.ps1" "ReleaseComObject"
@@ -193,16 +200,21 @@ Test-TextContains "scripts\install-windows.ps1" "gs10071w64.exe"
 Test-TextContains "scripts\install-windows.ps1" 'Get-Command "gswin64c.exe"'
 Test-TextContains "scripts\install-windows.ps1" "C:\Program Files\gs\*\bin\gswin64c.exe"
 Test-TextContains "scripts\install-windows.ps1" "my-pc-ghostscript-"
+Test-TextContains "scripts\install-windows.ps1" "my-pc-sumatrapdf-"
+Test-TextContains "scripts\install-windows.ps1" '$QuotedStartScript = ''"'' + $StartScript + ''"'''
 Test-TextContains "scripts\install-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\update-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\update-windows.ps1" 'Get-Command "gswin64c.exe"'
 Test-TextContains "scripts\update-windows.ps1" "C:\Program Files\gs\*\bin\gswin64c.exe"
 Test-TextContains "scripts\update-windows.ps1" "my-pc-ghostscript-"
+Test-TextContains "scripts\update-windows.ps1" "my-pc-sumatrapdf-"
+Test-TextContains "scripts\update-windows.ps1" '$QuotedStartScript = ''"'' + $StartScript + ''"'''
 Test-TextContains "scripts\update-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\start-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\start-windows.ps1" 'Get-Command "gswin64c.exe"'
 Test-TextContains "scripts\start-windows.ps1" "C:\Program Files\gs\*\bin\gswin64c.exe"
 Test-TextContains "scripts\start-windows.ps1" "my-pc-ghostscript-"
+Test-TextContains "scripts\start-windows.ps1" "my-pc-sumatrapdf-"
 Test-TextContains "scripts\start-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "scripts\start-windows.ps1" "Stop-StaleProjectServer"
 Test-TextContains "scripts\start-windows.ps1" "Get-RunningServerStatus"
@@ -214,11 +226,13 @@ Test-TextContains "scripts\start-windows.ps1" '.Replace("/", "\")'
 Test-TextContains "scripts\start-windows.ps1" "Get-NetTCPConnection"
 Test-TextContains "scripts\start-windows.ps1" "already in use by another process"
 Test-TextContains "src\maintenance.ts" "scripts\\start-windows.ps1"
+Test-TextContains "src\maintenance.ts" '$startScriptArgument = ''\"'' + $startScript + ''\"'''
 Test-TextContains "src\maintenance.ts" "'-Hidden'"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
 Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only"
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\printQueue.ts" "buildStopPrintQueueCommand"
+Test-TextContains "src\printQueue.ts" "whatsapp-print-powerpoint-"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\db.ts" "moveInterruptedJobFile"
 Test-TextContains "src\db.ts" "copyFileSync(sourcePath, destinationPath)"
@@ -280,6 +294,8 @@ const expectations = [
   [css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be respected'],
   [css.includes('@media (max-width: 620px)'), 'mobile responsive breakpoint must exist'],
   [css.includes('table-layout: fixed'), 'job tables must have stable column sizing'],
+  [css.includes('overflow-wrap: anywhere'), 'long customer/UI text must not break layout containers'],
+  [app.indexOf('await loadAll();') < app.indexOf('$("#appShell").classList.remove("hidden");'), 'dashboard shell must open only after required data loads'],
   [app.includes('function setOptionalText') && app.includes('if (element) element.textContent'), 'optional UI text setter must guard missing elements'],
   [app.includes('document.documentElement.dir'), 'language switching must update page direction'],
   [app.includes('window.lucide.createIcons'), 'Lucide icons must be initialized when available'],
@@ -554,6 +570,8 @@ if (!command.includes('FromBase64String')) failures.push('command must decode th
 if (command.includes('$args[0]')) failures.push('command must not depend on args that are not passed');
 if (command.includes(printerName)) failures.push('raw printer name must not be injected into the PowerShell command');
 if (!command.includes('Get-PrintJob -PrinterName $printerName')) failures.push('command must use the decoded printer variable');
+if (!command.includes('whatsapp-print-powerpoint-')) failures.push('command must include MY-PC PowerPoint temp jobs in startup cleanup');
+if (!command.includes('$isMyPcJob')) failures.push('command must keep stale cleanup scoped to MY-PC jobs');
 if (!command.includes('Write-Output $count')) failures.push('command must return the stopped job count');
 
 if (failures.length) {

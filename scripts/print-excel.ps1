@@ -86,15 +86,22 @@ function Invoke-WorksheetPrint {
 
 $excel = $null
 $workbook = $null
+$tempDir = $null
+$tempFilePath = $null
 $previousDefaultPrinter = Get-DefaultPrinterName
 
 try {
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-excel-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+  $tempFilePath = Join-Path $tempDir ([System.IO.Path]::GetFileName($FilePath))
+  Copy-Item -LiteralPath $FilePath -Destination $tempFilePath -Force
+
   Set-DefaultPrinter -Name $PrinterName
 
   $excel = New-Object -ComObject Excel.Application
   $excel.Visible = $false
   $excel.DisplayAlerts = $false
-  $workbook = $excel.Workbooks.Open($FilePath, $null, $true)
+  $workbook = $excel.Workbooks.Open($tempFilePath, $null, $true)
 
   $printedSheets = 0
   foreach ($sheet in $workbook.Worksheets) {
@@ -132,4 +139,7 @@ try {
   }
   [GC]::Collect()
   [GC]::WaitForPendingFinalizers()
+  if ($tempDir -and (Test-Path -LiteralPath $tempDir)) {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }

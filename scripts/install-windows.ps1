@@ -141,26 +141,31 @@ function Initialize-SumatraPdf($ProjectRoot) {
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   New-Item -ItemType Directory -Force -Path $SumatraDir | Out-Null
 
-  $SumatraZip = Join-Path $env:TEMP "SumatraPDF-3.6.1-64.zip"
-  $ExtractRoot = Join-Path $env:TEMP "my-pc-sumatrapdf"
-  if (Test-Path $ExtractRoot) {
-    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
-  }
-
   $SumatraUrl = "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip"
-  Invoke-WebRequest -Uri $SumatraUrl -OutFile $SumatraZip
-  Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+  $SumatraTempDir = Join-Path $env:TEMP ("my-pc-sumatrapdf-" + [System.Guid]::NewGuid().ToString("N"))
+  $SumatraZip = Join-Path $SumatraTempDir "SumatraPDF-3.6.1-64.zip"
+  $ExtractRoot = Join-Path $SumatraTempDir "extract"
+  New-Item -ItemType Directory -Force -Path $SumatraTempDir | Out-Null
 
-  $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "*.exe" |
-    Where-Object { $_.Name -like "SumatraPDF*.exe" } |
-    Select-Object -First 1
-  if (-not $DownloadedExe) {
-    $ExtractedFiles = (Get-ChildItem $ExtractRoot -Recurse | Select-Object -ExpandProperty Name) -join ", "
-    throw "Could not extract SumatraPDF executable from the portable package. Extracted files: $ExtractedFiles"
+  try {
+    Invoke-WebRequest -Uri $SumatraUrl -OutFile $SumatraZip
+    Expand-Archive -Path $SumatraZip -DestinationPath $ExtractRoot -Force
+
+    $DownloadedExe = Get-ChildItem $ExtractRoot -Recurse -Filter "*.exe" |
+      Where-Object { $_.Name -like "SumatraPDF*.exe" } |
+      Select-Object -First 1
+    if (-not $DownloadedExe) {
+      $ExtractedFiles = (Get-ChildItem $ExtractRoot -Recurse | Select-Object -ExpandProperty Name) -join ", "
+      throw "Could not extract SumatraPDF executable from the portable package. Extracted files: $ExtractedFiles"
+    }
+
+    Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
+    Write-Host "SumatraPDF installed: $SumatraExe"
+  } finally {
+    if ($SumatraTempDir -and (Test-Path -LiteralPath $SumatraTempDir)) {
+      Remove-Item -LiteralPath $SumatraTempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
-
-  Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
-  Write-Host "SumatraPDF installed: $SumatraExe"
 }
 
 function Initialize-Ghostscript($ProjectRoot) {
@@ -374,6 +379,7 @@ if ($EnableStartup -and -not $NoStartup) {
 
 if (-not $NoStart) {
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
+  $QuotedStartScript = '"' + $StartScript + '"'
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
   Start-Process -FilePath $PowerShellPath -ArgumentList @(
     "-NoProfile",
@@ -382,7 +388,7 @@ if (-not $NoStart) {
     "-WindowStyle",
     "Hidden",
     "-File",
-    $StartScript,
+    $QuotedStartScript,
     "-Hidden"
   ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden
 }

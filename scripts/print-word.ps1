@@ -35,13 +35,20 @@ if (-not $printer) {
 
 $word = $null
 $document = $null
+$tempDir = $null
+$tempFilePath = $null
 
 try {
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-word-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+  $tempFilePath = Join-Path $tempDir ([System.IO.Path]::GetFileName($FilePath))
+  Copy-Item -LiteralPath $FilePath -Destination $tempFilePath -Force
+
   $word = New-Object -ComObject Word.Application
   $word.Visible = $false
   $word.DisplayAlerts = 0
   $word.ActivePrinter = $PrinterName
-  $document = $word.Documents.Open($FilePath, $false, $true)
+  $document = $word.Documents.Open($tempFilePath, $false, $true)
 
   for ($i = 0; $i -lt [Math]::Max(1, $Copies); $i++) {
     $document.PrintOut($false)
@@ -57,4 +64,7 @@ try {
   }
   [GC]::Collect()
   [GC]::WaitForPendingFinalizers()
+  if ($tempDir -and (Test-Path -LiteralPath $tempDir)) {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }

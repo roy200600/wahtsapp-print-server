@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.55";
+const APP_VERSION = "1.0.56";
 const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
 
 const state = {
@@ -368,12 +368,12 @@ function bindLogin() {
         await api("/api/auth/setup", postJson({ password }));
         state.authConfigured = true;
       }
+      await loadAll();
       state.authenticated = true;
+      render();
       $("#loginView").classList.add("hidden");
       $("#appShell").classList.remove("hidden");
       $("#appFooter").classList.remove("hidden");
-      await loadAll();
-      render();
     } catch (error) {
       notify("error", error.message || "כניסה נכשלה.");
     } finally {
