@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $MinimumDiagnosticsVersion = "1.0.42"
-$RecommendedVersion = "1.0.53"
+$RecommendedVersion = "1.0.54"
 
 function Add-Check {
   param(
@@ -117,6 +117,10 @@ if (-not $engines.ok) {
 }
 
 $printers = Invoke-Json "$BaseUrl/api/printers/details"
+$selectedPrinterName = ""
+if ($status.ok -and $status.value.config.printerName) {
+  $selectedPrinterName = [string]$status.value.config.printerName
+}
 if (-not $printers.ok) {
   Add-Check "printers" "failed" "Cannot read Windows printer list." $printers
 } else {
@@ -124,6 +128,25 @@ if (-not $printers.ok) {
   Add-Check "printers" "passed" "Windows printer list was read." @{
     count = $printerRows.Count
     names = @($printerRows | ForEach-Object { $_.name })
+  }
+
+  if ([string]::IsNullOrWhiteSpace($selectedPrinterName)) {
+    Add-Check "selectedPrinter" "warning" "No printer is selected in the application settings." @{
+      selectedPrinter = $selectedPrinterName
+    }
+  } else {
+    $selectedPrinter = $printerRows | Where-Object { $_.name -eq $selectedPrinterName } | Select-Object -First 1
+    if ($selectedPrinter) {
+      Add-Check "selectedPrinter" "passed" "Selected printer exists in Windows printer list." @{
+        selectedPrinter = $selectedPrinterName
+        details = $selectedPrinter
+      }
+    } else {
+      Add-Check "selectedPrinter" "failed" "Selected printer was not found in Windows printer list. Choose the printer again in settings." @{
+        selectedPrinter = $selectedPrinterName
+        availablePrinters = @($printerRows | ForEach-Object { $_.name })
+      }
+    }
   }
 }
 
@@ -166,6 +189,16 @@ $report = [pscustomobject]@{
   projectRoot = $ProjectRoot
   minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
   recommendedVersion = $RecommendedVersion
+  fieldValidationChecklist = @(
+    "Send a normal PDF and confirm physical paper output.",
+    "Send a password-protected PDF and reply with the password. Confirm physical paper output.",
+    "Send the wrong PDF password. Confirm no print and a system alert to manager plus MY-PC owner.",
+    "Send JPG, JPEG, and PNG. Confirm physical paper output.",
+    "Send DOC/DOCX only when Word or compatible Office is installed. Confirm physical paper output.",
+    "Send XLS/XLSX and PPT/PPTX only when Office is installed. Confirm physical paper output.",
+    "Restart the PC during or after a queued job. Confirm later jobs are not blocked.",
+    "Use the selected printer name exactly as shown in Windows, including spaces and parentheses."
+  )
   checks = $Checks
 }
 

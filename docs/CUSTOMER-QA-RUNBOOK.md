@@ -1,6 +1,6 @@
 # Customer QA Runbook
 
-Use this runbook after installing or updating a customer machine to `v1.0.42` or newer.
+Use this runbook after installing or updating a customer machine to `v1.0.54` or newer.
 
 ## Quick Command
 
@@ -27,8 +27,10 @@ logs\customer-qa-YYYYMMDD-HHMMSS.json
 - SumatraPDF availability.
 - Ghostscript availability.
 - Windows printer list availability.
+- Whether the selected printer exists in the Windows printer list.
 - Required project folders.
 - Node.js or bundled Node.js availability.
+- A manual field-validation checklist for the physical print tests.
 
 ## What It Does Not Do
 
@@ -67,3 +69,16 @@ Send the generated `customer-qa-*.json` report when:
 - The selected printer is missing or renamed.
 - WhatsApp is connected but jobs do not progress.
 - Jobs remain stuck after restart.
+
+## Required Physical Confirmation
+
+The JSON report proves software readiness only. It does not prove that paper came out of the printer.
+
+Before marking a customer installation as fully verified, confirm:
+
+1. PDF printed physically.
+2. Password-protected PDF printed physically after the correct password.
+3. Wrong PDF password did not print and generated alerts.
+4. JPG/JPEG/PNG printed physically.
+5. DOC/DOCX printed physically when Office is installed.
+6. Restart during an active or queued job does not block later jobs.

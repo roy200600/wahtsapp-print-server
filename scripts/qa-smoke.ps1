@@ -112,6 +112,7 @@ Assert-FileExists "docs\QA-1.0.50.md"
 Assert-FileExists "docs\QA-1.0.51.md"
 Assert-FileExists "docs\QA-1.0.52.md"
 Assert-FileExists "docs\QA-1.0.53.md"
+Assert-FileExists "docs\QA-1.0.54.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -237,8 +238,11 @@ Test-TextContains "scripts\customer-qa.ps1" "/api/diagnostics/print-engines"
 Test-TextContains "scripts\customer-qa.ps1" "customer-qa-"
 Test-TextContains "scripts\customer-qa.ps1" "MinimumDiagnosticsVersion"
 Test-TextContains "scripts\customer-qa.ps1" "serverVersion"
+Test-TextContains "scripts\customer-qa.ps1" "selectedPrinter"
+Test-TextContains "scripts\customer-qa.ps1" "fieldValidationChecklist"
 Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" "It does not print a test page"
 Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" '`serverVersion` failed'
+Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" "Required Physical Confirmation"
 
 $uiStaticSmoke = @'
 const fs = await import('node:fs');
