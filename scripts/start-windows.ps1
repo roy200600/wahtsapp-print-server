@@ -115,6 +115,15 @@ function Get-RunningServerStatus($Port) {
   }
 }
 
+function Test-RunningServerDiagnostics($Port) {
+  try {
+    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/diagnostics/print-engines" -TimeoutSec 2 | Out-Null
+    return $true
+  } catch {
+    return $false
+  }
+}
+
 function Get-LocalPackageVersion {
   $PackagePath = Join-Path $ProjectRoot "package.json"
   if (-not (Test-Path $PackagePath)) {
@@ -150,8 +159,8 @@ function Test-ProjectServerProcess($Process) {
     return $false
   }
 
-  $normalizedCommand = $commandLine.ToLowerInvariant()
-  $normalizedRoot = $ProjectRoot.ToLowerInvariant()
+  $normalizedCommand = $commandLine.ToLowerInvariant().Replace("/", "\")
+  $normalizedRoot = $ProjectRoot.ToLowerInvariant().Replace("/", "\")
   return (
     $normalizedCommand.Contains("dist\main.js") -and
     $normalizedCommand.Contains($normalizedRoot)
@@ -280,7 +289,8 @@ $RunningStatus = Get-RunningServerStatus $ConfiguredPort
 if ($RunningStatus) {
   $LocalVersion = Get-LocalPackageVersion
   $RunningVersion = [string]$RunningStatus.version
-  if ($LocalVersion -and $RunningVersion -eq $LocalVersion) {
+  $DiagnosticsAvailable = Test-RunningServerDiagnostics $ConfiguredPort
+  if ($LocalVersion -and $RunningVersion -eq $LocalVersion -and $DiagnosticsAvailable) {
     Write-Host "MY-PC WhatsApp Print Server is already running: http://localhost:$ConfiguredPort"
     if ($OpenBrowser) {
       Start-Process "http://localhost:$ConfiguredPort"
@@ -288,7 +298,7 @@ if ($RunningStatus) {
     return
   }
 
-  Write-Host "Running server version '$RunningVersion' does not match installed version '$LocalVersion'. Restarting server..."
+  Write-Host "Running server version '$RunningVersion' does not match installed version '$LocalVersion' or diagnostics are missing. Restarting server..."
   Stop-ProjectServerProcesses
 }
 
