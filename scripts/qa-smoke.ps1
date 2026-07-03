@@ -96,6 +96,7 @@ Assert-FileExists "docs\QA-1.0.27.md"
 Assert-FileExists "docs\QA-1.0.28.md"
 Assert-FileExists "docs\QA-1.0.29.md"
 Assert-FileExists "docs\QA-1.0.30.md"
+Assert-FileExists "docs\QA-1.0.31.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -151,6 +152,8 @@ Test-TextContains "src\errorDetails.ts" "stdout"
 Test-TextContains "src\errorDetails.ts" "stderr"
 Test-TextContains "src\errorDetails.ts" "Technical details"
 Test-TextContains "src\printOrders.ts" "this.orders.delete(order.phone)"
+Test-TextContains "src\printOrders.ts" "Customer message skipped because WhatsApp is disconnected"
+Test-TextContains "src\printOrders.ts" "sendFailureWarningThrottleMs"
 
 $uiStaticSmoke = @'
 const fs = await import('node:fs');

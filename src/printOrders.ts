@@ -28,9 +28,11 @@ interface PendingPrintOrder {
 
 const reminderMs = 10 * 60 * 1000;
 const expiryMs = 30 * 60 * 1000;
+const sendFailureWarningThrottleMs = 15 * 60 * 1000;
 
 export class PrintOrderManager {
   private readonly orders = new Map<string, PendingPrintOrder>();
+  private readonly sendFailureWarnings = new Map<string, number>();
 
   constructor(
     private readonly getConfig: () => AppConfig,
@@ -305,6 +307,16 @@ export class PrintOrderManager {
     try {
       await this.sendMessage(remoteJid, text);
     } catch (error) {
+      if (isWhatsAppDisconnectedError(error)) {
+        const now = Date.now();
+        const lastWarningAt = this.sendFailureWarnings.get(remoteJid) ?? 0;
+        if (now - lastWarningAt > sendFailureWarningThrottleMs) {
+          this.sendFailureWarnings.set(remoteJid, now);
+          logger.warn({ remoteJid }, "Customer message skipped because WhatsApp is disconnected");
+        }
+        return;
+      }
+
       logger.error({ err: error, remoteJid }, "Failed to send customer print order message");
     }
   }
@@ -327,6 +339,10 @@ function classifyCustomerCommand(text: string): "print" | "more" | "cancel" | "u
     return "cancel";
   }
   return "unknown";
+}
+
+function isWhatsAppDisconnectedError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("WhatsApp is not connected");
 }
 
 function pdfPasswordPrompt(attachment: PrintLogEntry): string {
