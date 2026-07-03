@@ -108,6 +108,7 @@ Assert-FileExists "docs\QA-1.0.46.md"
 Assert-FileExists "docs\QA-1.0.47.md"
 Assert-FileExists "docs\QA-1.0.48.md"
 Assert-FileExists "docs\QA-1.0.49.md"
+Assert-FileExists "docs\QA-1.0.50.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -612,6 +613,35 @@ if (!protectedPdf || wrong.ok || !right.ok || pages !== 1) {
 '@
 
 Invoke-NodeSmoke "Encrypted PDF password verification" $pdfCryptoSmoke @($cryptoPdf)
+
+$passwordPdfDryRun = powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\print-pdf-profile.ps1 `
+  -FilePath $cryptoPdf `
+  -PrinterName "Olivetti d-Copia 400 KX (USB)" `
+  -SumatraPath "tools\SumatraPDF\SumatraPDF.exe" `
+  -ColorMode grayscale `
+  -DuplexMode simplex `
+  -Orientation auto `
+  -PaperSize A4 `
+  -Scaling fill-page `
+  -ScalePercent 90 `
+  -Copies 1 `
+  -Dpi 600 `
+  -Quality high `
+  -CompatibilityMode true `
+  -PdfPassword "312830714" `
+  -DryRun | Out-String
+
+foreach ($expected in @(
+  '"ok":  true',
+  '"printerName":  "Olivetti d-Copia 400 KX (USB)"',
+  '"-pwd"',
+  '"312830714"',
+  'SumatraPDF.exe'
+)) {
+  if ($passwordPdfDryRun -notmatch [regex]::Escape($expected)) {
+    throw "Encrypted PDF dry-run did not include expected value: $expected"
+  }
+}
 
 $printOrderPasswordFlowSmoke = @'
 const fs = await import('node:fs');
