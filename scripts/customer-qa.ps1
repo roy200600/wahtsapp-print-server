@@ -5,6 +5,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$MinimumDiagnosticsVersion = "1.0.42"
+$RecommendedVersion = "1.0.43"
 
 function Add-Check {
   param(
@@ -52,6 +54,19 @@ function Test-PathStatus {
   }
 }
 
+function Test-VersionAtLeast {
+  param(
+    [string]$Current,
+    [string]$Minimum
+  )
+
+  try {
+    return ([version]$Current) -ge ([version]$Minimum)
+  } catch {
+    return $false
+  }
+}
+
 $Checks = @()
 $timestamp = Get-Date
 $logsDir = Join-Path $ProjectRoot "logs"
@@ -67,13 +82,33 @@ if (-not $status.ok) {
     printerName = $status.value.config.printerName
     licenseMode = $status.value.license.mode
   }
+
+  if (-not (Test-VersionAtLeast $status.value.version $MinimumDiagnosticsVersion)) {
+    Add-Check "serverVersion" "failed" "Server version is too old for print-engine diagnostics. Update or restart the customer installation." @{
+      currentVersion = $status.value.version
+      minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
+      recommendedVersion = $RecommendedVersion
+    }
+  } elseif (-not (Test-VersionAtLeast $status.value.version $RecommendedVersion)) {
+    Add-Check "serverVersion" "warning" "Server is compatible, but not on the latest recommended version." @{
+      currentVersion = $status.value.version
+      minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
+      recommendedVersion = $RecommendedVersion
+    }
+  } else {
+    Add-Check "serverVersion" "passed" "Server version is current for this QA report." @{
+      currentVersion = $status.value.version
+      minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
+      recommendedVersion = $RecommendedVersion
+    }
+  }
 }
 
 $engines = Invoke-Json "$BaseUrl/api/diagnostics/print-engines"
 if (-not $engines.ok) {
   $message = "Cannot read print-engine diagnostics."
   if ($engines.error -match "404") {
-    $message = "Print-engine diagnostics endpoint is missing. Restart the server or update the customer installation to v1.0.42 or newer."
+    $message = "Print-engine diagnostics endpoint is missing. Restart the server or update the customer installation to v$MinimumDiagnosticsVersion or newer."
   }
   Add-Check "printEngines" "failed" $message $engines
 } else {
@@ -129,6 +164,8 @@ $report = [pscustomobject]@{
   userName = $env:USERNAME
   baseUrl = $BaseUrl
   projectRoot = $ProjectRoot
+  minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
+  recommendedVersion = $RecommendedVersion
   checks = $Checks
 }
 

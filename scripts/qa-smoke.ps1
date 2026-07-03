@@ -193,7 +193,10 @@ Test-TextContains "src\printOrders.ts" "Customer message skipped because WhatsAp
 Test-TextContains "src\printOrders.ts" "sendFailureWarningThrottleMs"
 Test-TextContains "scripts\customer-qa.ps1" "/api/diagnostics/print-engines"
 Test-TextContains "scripts\customer-qa.ps1" "customer-qa-"
+Test-TextContains "scripts\customer-qa.ps1" "MinimumDiagnosticsVersion"
+Test-TextContains "scripts\customer-qa.ps1" "serverVersion"
 Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" "It does not print a test page"
+Test-TextContains "docs\CUSTOMER-QA-RUNBOOK.md" '`serverVersion` failed'
 
 $uiStaticSmoke = @'
 const fs = await import('node:fs');
