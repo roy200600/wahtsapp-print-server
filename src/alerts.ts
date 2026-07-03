@@ -62,14 +62,14 @@ async function sendAlert(
       return;
     }
 
-    const text = rawMessage ? description : formatAlert(type, description, context);
+    const text = rawMessage ? description : formatSystemAlert(type, description, context);
     await Promise.all([...recipients].map((phone) => sender?.(phone, text)));
   } catch (error) {
     logger.error({ err: error, type }, "Failed to send WhatsApp system alert");
   }
 }
 
-function formatAlert(type: string, description: string, context?: SystemAlertContext): string {
+export function formatSystemAlert(type: string, description: string, context?: SystemAlertContext): string {
   const details = [
     field("מספר עבודה", context?.jobId),
     field("לקוח", context?.customerName),

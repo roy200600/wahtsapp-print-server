@@ -71,6 +71,7 @@ Assert-FileExists "docs\QA-1.0.22.md"
 Assert-FileExists "docs\QA-1.0.23.md"
 Assert-FileExists "docs\QA-1.0.24.md"
 Assert-FileExists "docs\QA-1.0.25.md"
+Assert-FileExists "docs\QA-1.0.26.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -171,6 +172,78 @@ if (!results.every(Boolean)) {
 '@
 
 node --input-type=module -e $pdfSecuritySmoke
+
+$alertsSmoke = @'
+const alerts = await import('./dist/alerts.js');
+const text = alerts.formatSystemAlert('Printer Offline', 'Unable to contact printer.', {
+  jobId: 'job-123',
+  customerName: 'Leon',
+  customerPhone: '972500000000',
+  fileName: 'invoice.pdf',
+  fileType: 'pdf',
+  fileSizeBytes: 1536,
+  printerName: 'Olivetti d-Copia 400 KX (USB)',
+  serverName: 'MY-PC WhatsApp Print Server',
+  computerName: 'WIN11-PC',
+  extra: { reason: 'Queue error' }
+});
+
+for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-123', 'Leon', '972500000000', 'invoice.pdf', 'pdf', '1.5 KB', 'Olivetti d-Copia 400 KX (USB)', 'WIN11-PC', 'Queue error']) {
+  if (!text.includes(expected)) {
+    console.error({ missing: expected, text });
+    process.exit(1);
+  }
+}
+'@
+
+node --input-type=module -e $alertsSmoke
+
+$fileValidationSmoke = @'
+const fs = await import('node:fs');
+const os = await import('node:os');
+const path = await import('node:path');
+const { defaultConfig } = await import('./dist/config.js');
+const { validateAttachment } = await import('./dist/security.js');
+
+const requiredTypes = ['doc', 'docx', 'rtf', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'pdf'];
+for (const type of requiredTypes) {
+  if (!defaultConfig.allowedFileTypes.includes(type)) {
+    console.error({ missingAllowedType: type, allowedFileTypes: defaultConfig.allowedFileTypes });
+    process.exit(1);
+  }
+}
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mypc-validation-test-'));
+const cfbDoc = path.join(dir, 'legacy.doc');
+const jpgFile = path.join(dir, 'photo.jpeg');
+try {
+  fs.writeFileSync(cfbDoc, Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00, 0x00, 0x00, 0x00]));
+  fs.writeFileSync(jpgFile, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]));
+
+  const base = {
+    id: 'qa',
+    chatId: 'qa',
+    senderName: 'QA',
+    senderPhone: '972500000000',
+    groupName: undefined,
+    mimeType: 'application/octet-stream',
+    sizeBytes: 12,
+    messageKey: 'qa'
+  };
+
+  const docResult = await validateAttachment({ ...base, fileName: 'legacy.doc', extension: 'doc', filePath: cfbDoc }, defaultConfig);
+  const imageResult = await validateAttachment({ ...base, fileName: 'photo.jpeg', extension: 'jpeg', filePath: jpgFile, mimeType: 'image/jpeg' }, defaultConfig);
+
+  if (!docResult.ok || !imageResult.ok) {
+    console.error({ docResult, imageResult });
+    process.exit(1);
+  }
+} finally {
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+'@
+
+node --input-type=module -e $fileValidationSmoke
 
 $pdfCryptoPython = Get-PdfCryptoPython
 if ($pdfCryptoPython) {
