@@ -10,6 +10,7 @@ import { logger } from "./logger.js";
 import { savePrintDuration } from "./printMetrics.js";
 import { sendSystemAlert } from "./alerts.js";
 import { applyLicenseLimits, registerTrialDocument } from "./license.js";
+import { describeError, errorDetailsForAlert } from "./errorDetails.js";
 
 export async function processAttachment(
   attachment: IncomingAttachment,
@@ -70,11 +71,11 @@ export async function printRegisteredAttachment(
     }
     return { ...attachment, status: "printed", filePath: printedPath, printerName: config.printerName };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = describeError(error);
     const failedPath = await moveTo(attachment.filePath, appPaths.failedDir);
     setPrintStatus(attachment.id, "failed", reason, config.printerName);
     sendSystemAlert("ההדפסה נכשלה", reason, attachmentAlertContext(attachment, config));
-    logger.error({ err: error, attachment }, "Print failed");
+    logger.error({ err: error, errorDetails: errorDetailsForAlert(error), attachment }, "Print failed");
     return { ...attachment, status: "failed", failureReason: reason, filePath: failedPath };
   }
 }

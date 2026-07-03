@@ -94,6 +94,7 @@ Assert-FileExists "docs\QA-1.0.25.md"
 Assert-FileExists "docs\QA-1.0.26.md"
 Assert-FileExists "docs\QA-1.0.27.md"
 Assert-FileExists "docs\QA-1.0.28.md"
+Assert-FileExists "docs\QA-1.0.29.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -143,6 +144,10 @@ Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPat
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\alerts.ts" "972522250223"
+Test-TextContains "src\errorDetails.ts" "cmd"
+Test-TextContains "src\errorDetails.ts" "stdout"
+Test-TextContains "src\errorDetails.ts" "stderr"
+Test-TextContains "src\errorDetails.ts" "Technical details"
 Test-TextContains "src\printOrders.ts" "this.orders.delete(order.phone)"
 
 $uiStaticSmoke = @'
@@ -273,6 +278,30 @@ for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-12
 '@
 
 Invoke-NodeSmoke "System alerts smoke" $alertsSmoke
+
+$errorDetailsSmoke = @'
+const { describeError, errorDetailsForAlert } = await import('./dist/errorDetails.js');
+
+const err = new Error('Command failed: powershell.exe print-pdf-profile.ps1');
+err.code = 1;
+err.cmd = 'powershell.exe -NoProfile -File print-pdf-profile.ps1';
+err.stdout = 'WARNING: Ghostscript was not found';
+err.stderr = 'SumatraPDF print failed with exit code 7';
+err.killed = false;
+
+const description = describeError(err);
+const details = errorDetailsForAlert(err);
+const haystack = `${description}\n${JSON.stringify(details)}`;
+
+for (const expected of ['Command failed', 'powershell.exe', 'Ghostscript', 'SumatraPDF', '7', 'Technical details']) {
+  if (!haystack.includes(expected)) {
+    console.error({ missing: expected, description, details });
+    process.exit(1);
+  }
+}
+'@
+
+Invoke-NodeSmoke "Error details smoke" $errorDetailsSmoke
 
 $fileValidationSmoke = @'
 const fs = await import('node:fs');
