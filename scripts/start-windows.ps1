@@ -39,6 +39,10 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $ExistingPath = (($env:Path -split ";") |
     Where-Object { $_ -and ([string]::Compare($_, $ShimDir, $true) -ne 0) }) -join ";"
   $env:Path = "$NodeDir;$ExistingPath"
+  try {
+    [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+    [Environment]::SetEnvironmentVariable("Path", $env:Path, "Process")
+  } catch {}
   $env:npm_node_execpath = $NodeExe
   $env:NODE = $NodeExe
   $env:npm_config_unicode = "true"
@@ -150,6 +154,41 @@ function Get-PortOwnerProcesses($Port) {
       Where-Object { $processIds -contains $_.ProcessId })
   } catch {
     return @()
+  }
+}
+
+function Get-PortOwnerProcessIds($Port) {
+  $ids = @()
+  try {
+    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    $ids += @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
+  } catch {}
+
+  if ($ids.Count -eq 0) {
+    try {
+      $netstatLines = @(& netstat.exe -ano -p tcp | Select-String -Pattern ":$Port\s+.*LISTENING\s+(\d+)")
+      foreach ($line in $netstatLines) {
+        if ($line.Matches.Count -gt 0) {
+          $ids += [int]$line.Matches[0].Groups[1].Value
+        }
+      }
+    } catch {}
+  }
+
+  return @($ids | Select-Object -Unique)
+}
+
+function Stop-PortOwnerProcesses($Port, $Reason) {
+  $processIds = @(Get-PortOwnerProcessIds $Port)
+  foreach ($processId in $processIds) {
+    Write-Host "Stopping server process on port ${Port}: PID $processId ($Reason)"
+    try {
+      Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+    } catch {}
+  }
+
+  if ($processIds.Count -gt 0) {
+    Start-Sleep -Seconds 2
   }
 }
 
@@ -319,6 +358,7 @@ if ($RunningStatus) {
 
   Write-Host "Running server version '$RunningVersion' does not match installed version '$LocalVersion' or diagnostics are missing. Restarting server..."
   Stop-ProjectServerProcesses
+  Stop-PortOwnerProcesses $ConfiguredPort "version mismatch or missing diagnostics"
 }
 
 Stop-StaleProjectServer $ConfiguredPort
@@ -353,7 +393,18 @@ if (-not (Test-Path "config\settings.json") -and (Test-Path "config\settings.exa
 }
 
 if ($Hidden) {
-  Start-Process -FilePath $NodeExe -ArgumentList @("dist/main.js") -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+  $ServerLog = Join-Path $ProjectRoot "logs\server-start.log"
+  $ServerErrorLog = Join-Path $ProjectRoot "logs\server-start-error.log"
+  Start-Process -FilePath $NodeExe -ArgumentList @("dist/main.js") -WorkingDirectory $ProjectRoot -WindowStyle Hidden -RedirectStandardOutput $ServerLog -RedirectStandardError $ServerErrorLog
+  Start-Sleep -Seconds 5
+  $StartedStatus = Get-RunningServerStatus $ConfiguredPort
+  if (-not $StartedStatus) {
+    $errorTail = ""
+    if (Test-Path -LiteralPath $ServerErrorLog) {
+      $errorTail = (Get-Content -LiteralPath $ServerErrorLog -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
+    }
+    throw "MY-PC WhatsApp Print Server did not start on port $ConfiguredPort. See $ServerLog and $ServerErrorLog. $errorTail"
+  }
   if ($OpenBrowser) {
     Start-Sleep -Seconds 3
     Start-Process "http://localhost:$ConfiguredPort"

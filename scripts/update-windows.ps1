@@ -40,6 +40,10 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $ExistingPath = (($env:Path -split ";") |
     Where-Object { $_ -and ([string]::Compare($_, $ShimDir, $true) -ne 0) }) -join ";"
   $env:Path = "$NodeDir;$ExistingPath"
+  try {
+    [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+    [Environment]::SetEnvironmentVariable("Path", $env:Path, "Process")
+  } catch {}
   $env:npm_node_execpath = $NodeExe
   $env:NODE = $NodeExe
   $env:npm_config_unicode = "true"
@@ -203,6 +207,46 @@ function Initialize-Ghostscript($ProjectRoot) {
   }
 }
 
+function Get-ConfiguredPort {
+  $settingsPath = Join-Path $ProjectRoot "config\settings.json"
+  if (Test-Path $settingsPath) {
+    try {
+      $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+      if ($settings.port) {
+        return [int]$settings.port
+      }
+    } catch {}
+  }
+
+  return 3010
+}
+
+function Stop-PortOwnerProcesses($Port, $Reason) {
+  try {
+    $processIds = @()
+    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    $processIds += @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
+    if ($processIds.Count -eq 0) {
+      $netstatLines = @(& netstat.exe -ano -p tcp | Select-String -Pattern ":$Port\s+.*LISTENING\s+(\d+)")
+      foreach ($line in $netstatLines) {
+        if ($line.Matches.Count -gt 0) {
+          $processIds += [int]$line.Matches[0].Groups[1].Value
+        }
+      }
+    }
+    $processIds = @($processIds | Select-Object -Unique)
+    foreach ($processId in $processIds) {
+      Write-Host "Stopping server process on port ${Port}: PID $processId ($Reason)"
+      try {
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+      } catch {}
+    }
+    if ($processIds.Count -gt 0) {
+      Start-Sleep -Seconds 2
+    }
+  } catch {}
+}
+
 Initialize-UnicodeConsole
 
 Write-Host "Stopping running server..."
@@ -214,6 +258,7 @@ Get-CimInstance Win32_Process |
   ForEach-Object {
     try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
   }
+Stop-PortOwnerProcesses (Get-ConfiguredPort) "update"
 
 if (Test-Path $ExtractRoot) {
   Remove-Item -LiteralPath $ExtractRoot -Recurse -Force

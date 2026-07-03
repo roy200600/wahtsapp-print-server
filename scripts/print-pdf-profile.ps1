@@ -43,8 +43,9 @@ if (-not (Test-Path -LiteralPath $FilePath)) {
   throw "PDF file not found: $FilePath"
 }
 
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
 if (-not [System.IO.Path]::IsPathRooted($SumatraPath)) {
-  $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
   $CandidateSumatraPath = Join-Path $ProjectRoot $SumatraPath
   if (Test-Path -LiteralPath $CandidateSumatraPath) {
     $SumatraPath = $CandidateSumatraPath
