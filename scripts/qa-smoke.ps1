@@ -69,6 +69,7 @@ Assert-FileExists "docs\QA-1.0.19.md"
 Assert-FileExists "docs\QA-1.0.21.md"
 Assert-FileExists "docs\QA-1.0.22.md"
 Assert-FileExists "docs\QA-1.0.23.md"
+Assert-FileExists "docs\QA-1.0.24.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -95,6 +96,7 @@ Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-sPDFPassword"
 Test-TextContains "scripts\print-pdf-profile.ps1" "DryRun"
+Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
 
 $hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
 $dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")
@@ -174,12 +176,26 @@ if ($pdfCryptoPython) {
 
     $pdfCryptoSmoke = @'
 const m = await import('./dist/pdfSecurity.js');
+const p = await import('./dist/pageCounter.js');
 const pdf = process.argv[1];
 const wrong = await m.verifyPdfPassword(pdf, 'wrong', 'tools/SumatraPDF/SumatraPDF.exe');
 const right = await m.verifyPdfPassword(pdf, '312830714', 'tools/SumatraPDF/SumatraPDF.exe');
+const pages = await p.countAttachmentPages({
+  id: 'qa',
+  chatId: 'qa',
+  senderName: 'QA',
+  senderPhone: '972500000000',
+  fileName: 'encrypted.pdf',
+  mimeType: 'application/pdf',
+  extension: 'pdf',
+  sizeBytes: 1,
+  filePath: pdf,
+  messageKey: 'qa',
+  pdfPassword: '312830714'
+});
 
-if (wrong.ok || !right.ok) {
-  console.error({ wrong, right });
+if (wrong.ok || !right.ok || pages !== 1) {
+  console.error({ wrong, right, pages });
   process.exit(1);
 }
 '@

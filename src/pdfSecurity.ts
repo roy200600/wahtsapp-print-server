@@ -75,6 +75,24 @@ export async function verifyPdfPassword(
   }
 }
 
+export async function getPdfPageCount(filePath: string, password?: string): Promise<number> {
+  const options: { data: Uint8Array; password?: string } = {
+    data: new Uint8Array(fs.readFileSync(filePath))
+  };
+
+  if (password) {
+    options.password = String(password);
+  }
+
+  const loadingTask = getDocument(options);
+  try {
+    const pdf = await loadingTask.promise;
+    return Math.max(1, Number(pdf.numPages) || 1);
+  } finally {
+    await loadingTask.destroy().catch(() => undefined);
+  }
+}
+
 function cleanPassword(value: string): string {
   return value.trim().replace(/^["'“”‘’]+|["'“”‘’.,;:!?]+$/g, "");
 }

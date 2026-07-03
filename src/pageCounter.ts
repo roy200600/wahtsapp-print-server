@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingAttachment } from "./types.js";
 import { rootDir } from "./paths.js";
+import { getPdfPageCount } from "./pdfSecurity.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +15,7 @@ export async function countAttachmentPages(attachment: IncomingAttachment): Prom
   }
 
   if (extension === "pdf") {
-    return countPdfPages(attachment.filePath);
+    return countPdfPages(attachment.filePath, attachment.pdfPassword);
   }
 
   if (["doc", "docx", "rtf", "ppt", "pptx", "xls", "xlsx", "csv"].includes(extension)) {
@@ -28,10 +29,14 @@ export async function countAttachmentPages(attachment: IncomingAttachment): Prom
   return 1;
 }
 
-async function countPdfPages(filePath: string): Promise<number> {
-  const content = fs.readFileSync(filePath, "latin1");
-  const matches = content.match(/\/Type\s*\/Page\b/g);
-  return Math.max(1, matches?.length ?? 1);
+async function countPdfPages(filePath: string, password?: string): Promise<number> {
+  try {
+    return await getPdfPageCount(filePath, password);
+  } catch {
+    const content = fs.readFileSync(filePath, "latin1");
+    const matches = content.match(/\/Type\s*\/Page\b/g);
+    return Math.max(1, matches?.length ?? 1);
+  }
 }
 
 async function countOfficePages(filePath: string, extension: string): Promise<number> {

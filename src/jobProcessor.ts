@@ -160,9 +160,26 @@ function moveToBestEffortSync(sourcePath: string, destinationDir: string): strin
     fs.renameSync(sourcePath, destinationPath);
     return destinationPath;
   } catch (error) {
-    logger.error({ err: error, sourcePath, destinationPath }, "Failed to move print file synchronously");
-    return sourcePath;
+    logger.warn({ err: error, sourcePath, destinationPath }, "Failed to rename print file synchronously");
   }
+
+  try {
+    fs.copyFileSync(sourcePath, destinationPath);
+    try {
+      fs.unlinkSync(sourcePath);
+    } catch (unlinkError) {
+      logger.warn({ err: unlinkError, sourcePath, destinationPath }, "Copied failed file but source is still locked");
+    }
+    return destinationPath;
+  } catch (copyError) {
+    logger.error({ err: copyError, sourcePath, destinationPath }, "Failed to move print file synchronously");
+    sendSystemAlert("File move failed", copyError instanceof Error ? copyError.message : String(copyError), {
+      computerName: os.hostname(),
+      extra: { sourcePath, destinationPath }
+    });
+  }
+
+  return sourcePath;
 }
 
 function deletePrintedArtifacts(downloadPath: string, printedPath: string, jobId: string): void {
