@@ -97,6 +97,7 @@ Assert-FileExists "docs\QA-1.0.28.md"
 Assert-FileExists "docs\QA-1.0.29.md"
 Assert-FileExists "docs\QA-1.0.30.md"
 Assert-FileExists "docs\QA-1.0.31.md"
+Assert-FileExists "docs\QA-1.0.32.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -140,6 +141,11 @@ Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-sPDFPassword"
 Test-TextContains "scripts\print-pdf-profile.ps1" "DryRun"
+Test-TextContains "scripts\print-image.ps1" "DryRun"
+Test-TextContains "scripts\print-text.ps1" "DryRun"
+Test-TextContains "scripts\print-word.ps1" "DryRun"
+Test-TextContains "scripts\print-excel.ps1" "DryRun"
+Test-TextContains "scripts\print-powerpoint.ps1" "DryRun"
 Test-TextContains "scripts\print-pdf-profile.ps1" "Ghostscript compatibility render/print failed, trying SumatraPDF"
 Test-TextContains "scripts\print-pdf-profile.ps1" "ProcessStartInfo"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
@@ -225,6 +231,82 @@ try {
   }
 } finally {
   Remove-Item -LiteralPath $dryRunPdf -Force -ErrorAction SilentlyContinue
+}
+
+$officeDryRunDir = Join-Path ([System.IO.Path]::GetTempPath()) ("mypc-office-dryrun-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $officeDryRunDir | Out-Null
+
+try {
+  $dryRunFiles = @{
+    image = Join-Path $officeDryRunDir "my-pc image.jpg"
+    text = Join-Path $officeDryRunDir "my-pc text.txt"
+    word = Join-Path $officeDryRunDir "my-pc word.docx"
+    excel = Join-Path $officeDryRunDir "my-pc excel.xlsx"
+    powerpoint = Join-Path $officeDryRunDir "my-pc powerpoint.pptx"
+  }
+
+  foreach ($file in $dryRunFiles.Values) {
+    Set-Content -LiteralPath $file -Encoding ASCII -Value "QA dry run"
+  }
+
+  $dryRuns = @(
+    @{
+      Name = "Image"
+      Output = & ".\scripts\print-image.ps1" -FilePath $dryRunFiles.image -PrinterName "QA Printer (USB)" -Copies 2 -DryRun
+      Engine = "System.Drawing"
+    },
+    @{
+      Name = "Text"
+      Output = & ".\scripts\print-text.ps1" -FilePath $dryRunFiles.text -PrinterName "QA Printer (USB)" -Copies 2 -DryRun
+      Engine = "System.Drawing"
+    },
+    @{
+      Name = "Word"
+      Output = & ".\scripts\print-word.ps1" -FilePath $dryRunFiles.word -PrinterName "QA Printer (USB)" -Copies 2 -DryRun
+      Engine = "Word.Application"
+    },
+    @{
+      Name = "Excel"
+      Output = & ".\scripts\print-excel.ps1" -FilePath $dryRunFiles.excel -PrinterName "QA Printer (USB)" -Copies 2 -DryRun
+      Engine = "Excel.Application"
+    },
+    @{
+      Name = "PowerPoint"
+      Output = & ".\scripts\print-powerpoint.ps1" `
+        -FilePath $dryRunFiles.powerpoint `
+        -PrinterName "QA Printer (USB)" `
+        -SumatraPath "tools\SumatraPDF\SumatraPDF.exe" `
+        -ColorMode grayscale `
+        -DuplexMode simplex `
+        -PaperSize A4 `
+        -Scaling fill-page `
+        -ScalePercent 90 `
+        -Copies 2 `
+        -Dpi 600 `
+        -Quality high `
+        -CompatibilityMode true `
+        -DryRun
+      Engine = "PowerPoint.Application -> PDF profile"
+    }
+  )
+
+  foreach ($dryRun in $dryRuns) {
+    $result = $dryRun.Output | ConvertFrom-Json
+    if (-not $result.ok) {
+      throw "$($dryRun.Name) dry-run did not return ok."
+    }
+    if ($result.printerName -ne "QA Printer (USB)") {
+      throw "$($dryRun.Name) dry-run did not preserve printer name."
+    }
+    if ([int]$result.copies -ne 2) {
+      throw "$($dryRun.Name) dry-run did not preserve copies."
+    }
+    if ($result.engine -ne $dryRun.Engine) {
+      throw "$($dryRun.Name) dry-run returned unexpected engine: $($result.engine)"
+    }
+  }
+} finally {
+  Remove-Item -LiteralPath $officeDryRunDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $pdfSecuritySmoke = @'

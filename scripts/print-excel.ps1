@@ -5,13 +5,28 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$PrinterName,
 
-  [int]$Copies = 1
+  [int]$Copies = 1,
+
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $FilePath)) {
   throw "Excel file not found: $FilePath"
+}
+
+if ($DryRun) {
+  [pscustomobject]@{
+    ok = $true
+    filePath = (Resolve-Path -LiteralPath $FilePath).Path
+    printerName = $PrinterName
+    copies = [Math]::Max(1, $Copies)
+    engine = "Excel.Application"
+    fitToPagesWide = 1
+    printUsedRangeOnly = $true
+  } | ConvertTo-Json -Depth 5
+  exit 0
 }
 
 $printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue

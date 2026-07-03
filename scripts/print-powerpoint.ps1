@@ -27,13 +27,35 @@ param(
   [ValidateSet("draft", "normal", "high")]
   [string]$Quality = "high",
 
-  [string]$CompatibilityMode = "true"
+  [string]$CompatibilityMode = "true",
+
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path -LiteralPath $FilePath)) {
   throw "PowerPoint file not found: $FilePath"
+}
+
+if ($DryRun) {
+  [pscustomobject]@{
+    ok = $true
+    filePath = (Resolve-Path -LiteralPath $FilePath).Path
+    printerName = $PrinterName
+    sumatraPath = $SumatraPath
+    colorMode = $ColorMode
+    duplexMode = $DuplexMode
+    paperSize = $PaperSize
+    scaling = $Scaling
+    scalePercent = $ScalePercent
+    copies = [Math]::Max(1, $Copies)
+    dpi = $Dpi
+    quality = $Quality
+    compatibilityMode = $CompatibilityMode
+    engine = "PowerPoint.Application -> PDF profile"
+  } | ConvertTo-Json -Depth 5
+  exit 0
 }
 
 $printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
