@@ -20,6 +20,7 @@ import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
 import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
+import { runUpdate } from "./maintenance.js";
 
 type StatusListener = (state: WhatsAppRuntimeState) => void;
 
@@ -145,6 +146,17 @@ export class WhatsAppService {
     if (!this.socket || !message.message || message.key.fromMe) {
       return;
     }
+
+    const text = safeContentText(message.message);
+    const remoteJid = message.key.remoteJid ?? "";
+    const senderJid = message.key.participant ?? message.key.remoteJid ?? "";
+    const senderPhone = normalizePhone(senderJid.split("@")[0] ?? "");
+
+    if (text && isOwnerCloudUpdateCommand(senderPhone, text)) {
+      await this.handleOwnerCloudUpdateCommand(remoteJid, senderPhone);
+      return;
+    }
+
     if (!getLicenseStatus().canRun) {
       await this.stop(false);
       return;
@@ -155,11 +167,7 @@ export class WhatsAppService {
     const image = content.imageMessage;
     const mediaMessage = document ?? image;
     if (!mediaMessage) {
-      const text = safeContentText(message.message);
       if (text) {
-        const remoteJid = message.key.remoteJid ?? "";
-        const senderJid = message.key.participant ?? message.key.remoteJid ?? "";
-        const senderPhone = normalizePhone(senderJid.split("@")[0] ?? "");
         await this.printOrders.receiveText(senderPhone, remoteJid, text);
       }
       return;
@@ -220,6 +228,22 @@ export class WhatsAppService {
     }
   }
 
+  private async handleOwnerCloudUpdateCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || `${senderPhone}@s.whatsapp.net`;
+    try {
+      await this.socket?.sendMessage(targetJid, {
+        text: "עדכון ענן התקבל. המערכת מתחילה לעדכן ברקע ותיטען מחדש בעוד כדקה."
+      });
+      const result = await runUpdate();
+      logger.warn({ senderPhone, result }, "Owner cloud update command accepted");
+      sendSystemAlert("עדכון ענן הופעל", `פקודת עדכון הופעלה מרחוק על ידי ${senderPhone}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner cloud update command failed");
+      await this.socket?.sendMessage(targetJid, { text: `עדכון ענן נכשל: ${message}` }).catch(() => {});
+    }
+  }
+
   private async reply(message: proto.IWebMessageInfo, result: PrintLogEntry): Promise<void> {
     if (!this.socket || !message.key.remoteJid) {
       return;
@@ -275,6 +299,34 @@ function safeContentText(message?: proto.IMessage | null): string | undefined {
     logger.error({ err: error }, "Failed to read WhatsApp message text");
     return undefined;
   }
+}
+
+function isOwnerCloudUpdateCommand(senderPhone: string, text: string): boolean {
+  const ownerPhones = new Set(["0522250223", "972522250223", "522250223"]);
+  if (!ownerPhones.has(normalizePhone(senderPhone))) {
+    return false;
+  }
+
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?؟،,;:״"']/g, "")
+    .replace(/\s+/g, " ");
+
+  return new Set([
+    "עדכן",
+    "עדכון",
+    "ענן",
+    "עדכן ענן",
+    "עדכון ענן",
+    "up",
+    "upd",
+    "update",
+    "cloud",
+    "myup",
+    "mypc update",
+    "my pc update"
+  ]).has(normalized);
 }
 
 function mimeToExtension(mimeType: string): string {

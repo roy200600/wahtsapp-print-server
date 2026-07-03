@@ -300,8 +300,15 @@ function parseError(text) {
 }
 
 function setLoading(active, text = "טוען...") {
-  $("#loaderText").textContent = text;
-  $("#loader").classList.toggle("hidden", !active);
+  const loaderText = $("#loaderText");
+  const loader = $("#loader");
+  if (loaderText) loaderText.textContent = text;
+  if (loader) loader.classList.toggle("hidden", !active);
+}
+
+function setOptionalText(selector, text) {
+  const element = $(selector);
+  if (element) element.textContent = text;
 }
 
 function notify(type, message) {
@@ -459,7 +466,7 @@ function showDocumentation() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=1.0.15").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=1.0.16").catch(() => {});
   });
 }
 
@@ -1774,7 +1781,7 @@ async function checkUpdates() {
   setLoading(true, "בודק עדכונים...");
   try {
     const result = await api("/api/updates/check");
-    $("#updateStatusText").textContent = `${result.message} גרסה נוכחית: ${result.current}. גרסה ב-GitHub: ${result.latest}.`;
+    setOptionalText("#updateStatusText", `${result.message} גרסה נוכחית: ${result.current}. גרסה ב-GitHub: ${result.latest}.`);
     notify(result.available ? "warning" : "success", result.message);
   } catch (error) {
     notify("error", error.message || "בדיקת העדכונים נכשלה.");
@@ -1788,7 +1795,7 @@ async function runUpdate() {
   try {
     const result = await api("/api/updates/run", { method: "POST" });
     notify("success", result.message || "העדכון הסתיים.");
-    $("#updateStatusText").textContent = result.message || "העדכון הסתיים.";
+    setOptionalText("#updateStatusText", result.message || "העדכון הסתיים.");
     setTimeout(() => window.location.reload(), 120000);
   } catch (error) {
     notify("error", error.message || "העדכון נכשל.");
