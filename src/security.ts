@@ -3,8 +3,11 @@ import type { AppConfig, IncomingAttachment } from "./types.js";
 
 const blockedExtensions = new Set(["exe", "bat", "cmd", "js", "vbs", "ps1", "msi", "scr"]);
 const allowedContainerMatches: Record<string, string[]> = {
+  doc: ["cfb"],
   docx: ["zip"],
+  xls: ["cfb"],
   xlsx: ["zip"],
+  ppt: ["cfb"],
   pptx: ["zip"]
 };
 

@@ -17,6 +17,23 @@ if (-not (Test-Path -LiteralPath $FilePath)) {
 }
 
 $image = [System.Drawing.Image]::FromFile($FilePath)
+
+try {
+  $orientationProperty = $image.GetPropertyItem(274)
+  if ($orientationProperty -and $orientationProperty.Value.Length -gt 0) {
+    switch ([int]$orientationProperty.Value[0]) {
+      2 { $image.RotateFlip([System.Drawing.RotateFlipType]::RotateNoneFlipX) }
+      3 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate180FlipNone) }
+      4 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate180FlipX) }
+      5 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipX) }
+      6 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone) }
+      7 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate270FlipX) }
+      8 { $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate270FlipNone) }
+    }
+    $image.RemovePropertyItem(274)
+  }
+} catch {}
+
 $document = New-Object System.Drawing.Printing.PrintDocument
 $document.PrinterSettings.PrinterName = $PrinterName
 $document.PrinterSettings.Copies = [int16][Math]::Max(1, $Copies)
