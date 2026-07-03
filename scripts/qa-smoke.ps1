@@ -40,25 +40,6 @@ function Test-TextContains {
   }
 }
 
-function Get-PdfCryptoPython {
-  $candidates = @($env:MYPC_QA_PYTHON, "python")
-
-  foreach ($candidate in $candidates) {
-    if (-not $candidate) {
-      continue
-    }
-
-    try {
-      & $candidate -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('pypdf') else 1)" 2>$null
-      if ($LASTEXITCODE -eq 0) {
-        return $candidate
-      }
-    } catch {}
-  }
-
-  return $null
-}
-
 function Invoke-NodeSmoke {
   param(
     [string]$Name,
@@ -105,6 +86,8 @@ Assert-FileExists "docs\QA-1.0.36.md"
 Assert-FileExists "docs\QA-1.0.37.md"
 Assert-FileExists "docs\QA-1.0.38.md"
 Assert-FileExists "docs\QA-1.0.39.md"
+Assert-FileExists "docs\QA-1.0.40.md"
+Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -469,19 +452,13 @@ try {
 
 Invoke-NodeSmoke "File validation smoke" $fileValidationSmoke
 
-$pdfCryptoPython = Get-PdfCryptoPython
-if ($pdfCryptoPython) {
-  $cryptoDir = Join-Path ([System.IO.Path]::GetTempPath()) ("mypc-pdf-crypto-" + [System.Guid]::NewGuid().ToString("N"))
-  New-Item -ItemType Directory -Force -Path $cryptoDir | Out-Null
-  $cryptoPdf = Join-Path $cryptoDir "encrypted.pdf"
+$cryptoPdf = (Resolve-Path "tests\fixtures\encrypted-password-312830714.pdf").Path
 
-  try {
-    & $pdfCryptoPython -c "from pypdf import PdfWriter; import sys; w=PdfWriter(); w.add_blank_page(width=72,height=72); w.encrypt('312830714'); f=open(sys.argv[1], 'wb'); w.write(f); f.close()" $cryptoPdf
-
-    $pdfCryptoSmoke = @'
+$pdfCryptoSmoke = @'
 const m = await import('./dist/pdfSecurity.js');
 const p = await import('./dist/pageCounter.js');
 const pdf = process.argv.at(-1);
+const protectedPdf = m.isPasswordProtectedPdf(pdf);
 const wrong = await m.verifyPdfPassword(pdf, 'wrong', 'tools/SumatraPDF/SumatraPDF.exe');
 const right = await m.verifyPdfPassword(pdf, '312830714', 'tools/SumatraPDF/SumatraPDF.exe');
 const pages = await p.countAttachmentPages({
@@ -498,15 +475,15 @@ const pages = await p.countAttachmentPages({
   pdfPassword: '312830714'
 });
 
-if (wrong.ok || !right.ok || pages !== 1) {
-  console.error({ wrong, right, pages });
+if (!protectedPdf || wrong.ok || !right.ok || pages !== 1) {
+  console.error({ protectedPdf, wrong, right, pages });
   process.exit(1);
 }
 '@
 
-    Invoke-NodeSmoke "Encrypted PDF password verification" $pdfCryptoSmoke @($cryptoPdf)
+Invoke-NodeSmoke "Encrypted PDF password verification" $pdfCryptoSmoke @($cryptoPdf)
 
-    $printOrderPasswordFlowSmoke = @'
+$printOrderPasswordFlowSmoke = @'
 const fs = await import('node:fs');
 const os = await import('node:os');
 const path = await import('node:path');
@@ -668,12 +645,6 @@ try {
 }
 '@
 
-    Invoke-NodeSmoke "Encrypted PDF order flow" $printOrderPasswordFlowSmoke @($cryptoPdf)
-  } finally {
-    Remove-Item -LiteralPath $cryptoDir -Recurse -Force -ErrorAction SilentlyContinue
-  }
-} else {
-  Write-Host "Skipping encrypted PDF password verification because Python pypdf is not available."
-}
+Invoke-NodeSmoke "Encrypted PDF order flow" $printOrderPasswordFlowSmoke @($cryptoPdf)
 
 Write-Host "QA smoke checks passed."
