@@ -4,8 +4,8 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Current Release
 
-- Customer release tag: `v1.0.54`
-- Latest repository commit: see Git tag `v1.0.54`
+- Customer release tag: `v1.0.55`
+- Latest repository commit: see Git tag `v1.0.55`
 - Latest full QA command: `npm run qa:smoke`
 
 ## Requirement Status
@@ -13,7 +13,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Full QA smoke coverage | Covered | `scripts/qa-smoke.ps1` builds TypeScript, checks PowerShell scripts, validates UI/static requirements, encrypted PDF handling, alerts, file validation, PDF dry-run, Office/image/text dry-runs, and print-engine diagnostics. |
-| UI/UX baseline | Covered by static QA | Rubik font, RTL, responsive breakpoints, reduced motion, stable table layout, Lucide initialization, service-worker cache versioning, and diagnostics UI are checked in `scripts/qa-smoke.ps1`. |
+| UI/UX baseline | Covered by static QA and customer frontend check | Rubik font, RTL, responsive breakpoints, reduced motion, stable table layout, Lucide initialization, service-worker cache versioning, and diagnostics UI are checked in `scripts/qa-smoke.ps1`. `v1.0.55` adds a customer QA check for dashboard HTML and core asset references. |
 | PDF password detection | Covered | `src/pdfSecurity.ts` detects `/Encrypt`; `scripts/qa-smoke.ps1` uses `tests/fixtures/encrypted-password-312830714.pdf`. |
 | PDF password prompt flow | Covered | `src/printOrders.ts` holds encrypted PDF jobs, prompts the customer for a password, verifies the password, and only then proceeds. |
 | Wrong PDF password does not print | Covered | Encrypted PDF order-flow QA verifies wrong-password handling and alert routing. |
@@ -34,7 +34,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Field Validation Still Required
 
-Run these on at least one real customer machine after updating to `v1.0.54`:
+Run these on at least one real customer machine after updating to `v1.0.55`:
 
 1. Open diagnostics and confirm SumatraPDF is available.
 2. Confirm Ghostscript is either available or clearly shown as a warning.
@@ -50,4 +50,4 @@ Run these on at least one real customer machine after updating to `v1.0.54`:
 ## Notes
 
 - The current evidence supports the application logic and diagnostics paths.
-- The goal should remain open until at least one customer environment validates physical printing after `v1.0.54`.
+- The goal should remain open until at least one customer environment validates physical printing after `v1.0.55`.

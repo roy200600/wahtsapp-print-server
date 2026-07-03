@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $MinimumDiagnosticsVersion = "1.0.42"
-$RecommendedVersion = "1.0.54"
+$RecommendedVersion = "1.0.55"
 
 function Add-Check {
   param(
@@ -39,6 +39,29 @@ function Invoke-Json {
     return [pscustomobject]@{
       ok = $false
       value = $null
+      error = $_.Exception.Message
+      url = $Url
+    }
+  }
+}
+
+function Invoke-Text {
+  param([string]$Url)
+
+  try {
+    $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 10
+    return [pscustomobject]@{
+      ok = $true
+      statusCode = [int]$response.StatusCode
+      content = [string]$response.Content
+      error = ""
+      url = $Url
+    }
+  } catch {
+    return [pscustomobject]@{
+      ok = $false
+      statusCode = 0
+      content = ""
       error = $_.Exception.Message
       url = $Url
     }
@@ -100,6 +123,34 @@ if (-not $status.ok) {
       currentVersion = $status.value.version
       minimumDiagnosticsVersion = $MinimumDiagnosticsVersion
       recommendedVersion = $RecommendedVersion
+    }
+  }
+}
+
+$frontend = Invoke-Text "$BaseUrl/"
+if (-not $frontend.ok) {
+  Add-Check "frontend" "failed" "Cannot load the dashboard HTML." @{
+    url = $frontend.url
+    error = $frontend.error
+  }
+} else {
+  $frontendIssues = @()
+  foreach ($expected in @('dir="rtl"', '/app.js?v=', '/styles.css?v=', 'MY-PC')) {
+    if ($frontend.content -notmatch [regex]::Escape($expected)) {
+      $frontendIssues += $expected
+    }
+  }
+
+  if ($frontendIssues.Count -gt 0) {
+    Add-Check "frontend" "failed" "Dashboard HTML loaded but required UI markers are missing." @{
+      url = $frontend.url
+      statusCode = $frontend.statusCode
+      missing = $frontendIssues
+    }
+  } else {
+    Add-Check "frontend" "passed" "Dashboard HTML and core UI assets are referenced." @{
+      url = $frontend.url
+      statusCode = $frontend.statusCode
     }
   }
 }

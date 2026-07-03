@@ -1,6 +1,6 @@
 # Customer QA Runbook
 
-Use this runbook after installing or updating a customer machine to `v1.0.54` or newer.
+Use this runbook after installing or updating a customer machine to `v1.0.55` or newer.
 
 ## Quick Command
 
@@ -19,6 +19,7 @@ logs\customer-qa-YYYYMMDD-HHMMSS.json
 ## What It Checks
 
 - Local server availability at `http://localhost:3010`.
+- Dashboard HTML and core UI asset references.
 - Application version.
 - Whether the running server is new enough for print-engine diagnostics.
 - WhatsApp connection state.
@@ -65,6 +66,7 @@ After the report is created:
 Send the generated `customer-qa-*.json` report when:
 
 - The dashboard opens but printing fails.
+- The dashboard is blank, partially loaded, or visually broken.
 - PDF fails with Ghostscript or SumatraPDF errors.
 - The selected printer is missing or renamed.
 - WhatsApp is connected but jobs do not progress.
