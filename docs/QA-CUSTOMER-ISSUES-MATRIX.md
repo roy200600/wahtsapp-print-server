@@ -4,8 +4,8 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Current Release
 
-- Customer release tag: `v1.0.50`
-- Latest repository commit: see Git tag `v1.0.50`
+- Customer release tag: `v1.0.51`
+- Latest repository commit: see Git tag `v1.0.51`
 - Latest full QA command: `npm run qa:smoke`
 
 ## Requirement Status
@@ -21,7 +21,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 | System alert to configured manager | Covered | `src/alerts.ts` and QA verify configured alert recipients. |
 | Owner alert to `0522250223` | Covered | `src/alerts.ts` normalizes owner routing through `972522250223`; QA checks recipient inclusion. |
 | Alerts include server/customer/file/printer context | Covered | `formatSystemAlert` QA checks app version, computer, job, customer, file, size, printer, and extra details. |
-| Ghostscript missing customer failure | Mitigated | Install/update/start scripts bootstrap local Ghostscript; `/api/diagnostics/print-engines` and the diagnostics UI card report engine state. The PDF profile script falls back to SumatraPDF when Ghostscript cannot be used. |
+| Ghostscript missing customer failure | Mitigated | Install/update/start scripts bootstrap local Ghostscript; `/api/diagnostics/print-engines` and the diagnostics UI card report engine state. The PDF profile script falls back to SumatraPDF when Ghostscript cannot be used. `v1.0.51` prevents temp installer collisions during bootstrap. |
 | SumatraPDF missing customer failure | Mitigated | Install/update/start scripts bootstrap SumatraPDF; diagnostics reports missing SumatraPDF as a blocking PDF issue. |
 | Printer names with spaces/parentheses such as `Olivetti d-Copia 400 KX (USB)` | Covered | `src/printQueue.ts` passes queue-cleanup printer names to PowerShell via Base64; `v1.0.50` also dry-runs PDF printing with the same printer-name shape. |
 | Empty `{}` print failure logs | Covered | `src/errorDetails.ts` expands non-Error objects with constructor/type/technical details; QA covers empty object errors. |
@@ -33,7 +33,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Field Validation Still Required
 
-Run these on at least one real customer machine after updating to `v1.0.50`:
+Run these on at least one real customer machine after updating to `v1.0.51`:
 
 1. Open diagnostics and confirm SumatraPDF is available.
 2. Confirm Ghostscript is either available or clearly shown as a warning.
@@ -49,4 +49,4 @@ Run these on at least one real customer machine after updating to `v1.0.50`:
 ## Notes
 
 - The current evidence supports the application logic and diagnostics paths.
-- The goal should remain open until at least one customer environment validates physical printing after `v1.0.50`.
+- The goal should remain open until at least one customer environment validates physical printing after `v1.0.51`.

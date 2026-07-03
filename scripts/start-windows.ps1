@@ -252,6 +252,14 @@ function Initialize-Ghostscript($ProjectRoot) {
   }
   if ($Existing) { return }
 
+  $SystemGhostscript = Get-Command "gswin64c.exe" -ErrorAction SilentlyContinue
+  if ($SystemGhostscript) { return }
+  $SystemGhostscript = Get-ChildItem -Path @(
+    "C:\Program Files\gs\*\bin\gswin64c.exe",
+    "C:\Program Files (x86)\gs\*\bin\gswin32c.exe"
+  ) -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
+  if ($SystemGhostscript) { return }
+
   Write-Host "Ghostscript was not found. Downloading portable local Ghostscript runtime..."
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   New-Item -ItemType Directory -Force -Path $GhostscriptRoot | Out-Null
@@ -260,7 +268,9 @@ function Initialize-Ghostscript($ProjectRoot) {
   $GhostscriptTag = "gs10071"
   $InstallerName = "gs10071w64.exe"
   $InstallerUrl = "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/$GhostscriptTag/$InstallerName"
-  $InstallerPath = Join-Path $env:TEMP $InstallerName
+  $InstallerTempDir = Join-Path $env:TEMP ("my-pc-ghostscript-" + [System.Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $InstallerTempDir | Out-Null
+  $InstallerPath = Join-Path $InstallerTempDir $InstallerName
   $InstallPath = Join-Path $GhostscriptRoot "gs$($GhostscriptVersion)"
 
   try {
@@ -279,6 +289,10 @@ function Initialize-Ghostscript($ProjectRoot) {
     }
   } catch {
     Write-Warning "Ghostscript setup failed: $($_.Exception.Message). PDF compatibility mode will fall back to SumatraPDF."
+  } finally {
+    if ($InstallerTempDir -and (Test-Path -LiteralPath $InstallerTempDir)) {
+      Remove-Item -LiteralPath $InstallerTempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
 }
 
