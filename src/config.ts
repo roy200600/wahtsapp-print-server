@@ -157,7 +157,7 @@ function normalizeConfig(config: AppConfig): AppConfig {
     adminPassword: String(config.adminPassword || ""),
     allowedNumbers: config.allowedNumbers.map(normalizePhone).filter(Boolean),
     allowedGroups: config.allowedGroups.map((group) => group.trim()).filter(Boolean),
-    allowedFileTypes: config.allowedFileTypes.map((type) => type.toLowerCase().replace(".", "")),
+    allowedFileTypes: normalizeAllowedFileTypes(config.allowedFileTypes),
     alertsPhone: normalizeAlertPhone(config.alertsPhone),
     alertsEnabled: Boolean(config.alertsEnabled && normalizeAlertPhone(config.alertsPhone)),
     allowGroupPrinting: Boolean(config.allowGroupPrinting),
@@ -184,6 +184,23 @@ function normalizeBranding(branding: Partial<AppConfig["branding"]> | undefined)
     footerUrl: String(normalized.footerUrl || defaultConfig.branding.footerUrl),
     footerUrlLabel: String(normalized.footerUrlLabel || defaultConfig.branding.footerUrlLabel)
   };
+}
+
+function normalizeAllowedFileTypes(fileTypes: string[] | undefined): string[] {
+  const normalized = [...new Set((fileTypes ?? [])
+    .map((type) => String(type).toLowerCase().replace(".", "").trim())
+    .filter(Boolean))];
+
+  if (normalized.length === 0 || isLegacyBasicFileTypeSet(normalized)) {
+    return [...defaultConfig.allowedFileTypes];
+  }
+
+  return normalized;
+}
+
+function isLegacyBasicFileTypeSet(fileTypes: string[]): boolean {
+  const legacy = ["pdf", "jpg", "jpeg", "png"];
+  return fileTypes.length === legacy.length && legacy.every((type) => fileTypes.includes(type));
 }
 
 function normalizeOfficePrintProfile(profile: Partial<AppConfig["officePrintProfile"]> | undefined) {

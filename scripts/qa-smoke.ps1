@@ -47,9 +47,11 @@ if (-not $SkipBuild) {
 Assert-FileExists "public\assets\fonts\Rubik-Variable.ttf"
 Assert-FileExists "tools\SumatraPDF\SumatraPDF.exe"
 Assert-FileExists "docs\QA-1.0.19.md"
+Assert-FileExists "docs\QA-1.0.21.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
+  "scripts\print-pdf.ps1",
   "scripts\print-image.ps1",
   "scripts\print-word.ps1",
   "scripts\print-excel.ps1",
@@ -79,10 +81,12 @@ fs.writeFileSync(regularPdf, '%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntraile
 fs.writeFileSync(encryptedPdf, '%PDF-1.4\ntrailer << /Encrypt 7 0 R >>');
 
 const hebrewPasswordText = '\u05e1\u05d9\u05e1\u05de\u05d4 1234';
+const hebrewNaturalPasswordText = '\u05d4\u05e1\u05d9\u05e1\u05de\u05d4 \u05d4\u05d9\u05d0: 312830714';
 const results = [
   m.isPasswordProtectedPdf(regularPdf) === false,
   m.isPasswordProtectedPdf(encryptedPdf) === true,
   m.extractPdfPassword(hebrewPasswordText) === '1234',
+  m.extractPdfPassword(hebrewNaturalPasswordText) === '312830714',
   m.extractPdfPassword('password: abcd') === 'abcd',
   m.extractPdfPassword('abcd', true) === 'abcd'
 ];

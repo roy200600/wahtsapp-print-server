@@ -36,14 +36,14 @@ export async function registerAttachment(
 
   const validation = await validateAttachment(attachment, config);
   if (!validation.ok) {
-    moveTo(attachment.filePath, appPaths.failedDir);
+    await moveTo(attachment.filePath, appPaths.failedDir);
     sendSystemAlert(classifyValidationFailure(validation.reason), validation.reason, attachmentAlertContext(attachment, config));
     return writeLog(attachment, config, createdAt, "rejected", validation.reason);
   }
 
   const trialCheck = registerTrialDocument(attachment.senderPhone);
   if (!trialCheck.ok) {
-    moveTo(attachment.filePath, appPaths.failedDir);
+    await moveTo(attachment.filePath, appPaths.failedDir);
     sendSystemAlert("Trial limit reached", trialCheck.reason, attachmentAlertContext(attachment, config));
     return writeLog(attachment, config, createdAt, "rejected", trialCheck.reason);
   }
@@ -61,7 +61,7 @@ export async function printRegisteredAttachment(
     setPrintStatus(attachment.id, "printing", undefined, config.printerName);
     await printFile(attachment, config);
     const durationMs = Date.now() - startedAt;
-    const printedPath = moveTo(attachment.filePath, appPaths.printedDir);
+    const printedPath = await moveTo(attachment.filePath, appPaths.printedDir);
     setPrintStatus(attachment.id, "printed", undefined, config.printerName);
     savePrintDuration(attachment.id, durationMs);
     if (config.deleteAfterPrint) {
@@ -71,7 +71,7 @@ export async function printRegisteredAttachment(
     return { ...attachment, status: "printed", filePath: printedPath, printerName: config.printerName };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    const failedPath = moveTo(attachment.filePath, appPaths.failedDir);
+    const failedPath = await moveTo(attachment.filePath, appPaths.failedDir);
     setPrintStatus(attachment.id, "failed", reason, config.printerName);
     sendSystemAlert("ההדפסה נכשלה", reason, attachmentAlertContext(attachment, config));
     logger.error({ err: error, attachment }, "Print failed");
@@ -85,7 +85,7 @@ export function failRegisteredAttachment(
   reason: string
 ): PrintLogEntry {
   const config = applyLicenseLimits(getConfig());
-  const failedPath = moveTo(attachment.filePath, appPaths.failedDir);
+  const failedPath = moveToBestEffortSync(attachment.filePath, appPaths.failedDir);
   setPrintStatus(attachment.id, "failed", reason, config.printerName);
   return { ...attachment, status: "failed", failureReason: reason, filePath: failedPath, printerName: config.printerName };
 }
@@ -109,15 +109,60 @@ function writeLog(
   return entry;
 }
 
-function moveTo(sourcePath: string, destinationDir: string): string {
+async function moveTo(sourcePath: string, destinationDir: string): Promise<string> {
   fs.mkdirSync(destinationDir, { recursive: true });
   if (!fs.existsSync(sourcePath)) {
     return sourcePath;
   }
 
-  const destinationPath = path.join(destinationDir, path.basename(sourcePath));
-  fs.renameSync(sourcePath, destinationPath);
-  return destinationPath;
+  const destinationPath = uniqueDestinationPath(destinationDir, path.basename(sourcePath));
+  const errors: string[] = [];
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      fs.renameSync(sourcePath, destinationPath);
+      return destinationPath;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+      if (!isRetryableFileError(error) || attempt === 6) {
+        break;
+      }
+      await wait(250 * attempt);
+    }
+  }
+
+  try {
+    fs.copyFileSync(sourcePath, destinationPath);
+    try {
+      fs.unlinkSync(sourcePath);
+    } catch (unlinkError) {
+      logger.warn({ err: unlinkError, sourcePath, destinationPath }, "Moved file by copy but source is still locked");
+    }
+    return destinationPath;
+  } catch (copyError) {
+    logger.error({ err: copyError, sourcePath, destinationPath, errors }, "Failed to move print file");
+    sendSystemAlert("File move failed", copyError instanceof Error ? copyError.message : String(copyError), {
+      computerName: os.hostname(),
+      extra: { sourcePath, destinationPath, errors }
+    });
+    return sourcePath;
+  }
+}
+
+function moveToBestEffortSync(sourcePath: string, destinationDir: string): string {
+  fs.mkdirSync(destinationDir, { recursive: true });
+  if (!fs.existsSync(sourcePath)) {
+    return sourcePath;
+  }
+
+  const destinationPath = uniqueDestinationPath(destinationDir, path.basename(sourcePath));
+  try {
+    fs.renameSync(sourcePath, destinationPath);
+    return destinationPath;
+  } catch (error) {
+    logger.error({ err: error, sourcePath, destinationPath }, "Failed to move print file synchronously");
+    return sourcePath;
+  }
 }
 
 function deletePrintedArtifacts(downloadPath: string, printedPath: string, jobId: string): void {
@@ -141,6 +186,24 @@ function deletePrintedArtifacts(downloadPath: string, printedPath: string, jobId
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function uniqueDestinationPath(destinationDir: string, fileName: string): string {
+  const parsed = path.parse(fileName);
+  let candidate = path.join(destinationDir, fileName);
+  let counter = 1;
+
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(destinationDir, `${parsed.name}-${counter}${parsed.ext}`);
+    counter++;
+  }
+
+  return candidate;
+}
+
+function isRetryableFileError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EBUSY" || code === "EPERM" || code === "EACCES" || code === "ENOTEMPTY";
 }
 
 function classifyValidationFailure(reason: string): string {

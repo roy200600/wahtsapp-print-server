@@ -36,6 +36,7 @@ export interface PrinterCompatibilityCheck {
   message: string;
   printer?: PrinterCompatibilityInfo;
   issues: string[];
+  warnings?: string[];
 }
 
 export class PrinterManager {
@@ -76,18 +77,22 @@ export class PrinterStatusChecker {
     }
 
     const issues: string[] = [];
+    const warnings: string[] = [];
     if (!printer.driverValid) issues.push("printer-driver-invalid");
-    if (!printer.available) issues.push("printer-not-available");
-    if (printer.queueErrors > 0) issues.push("queue-has-errors");
+    if (hasBlockingPrinterStatus(printer.status, printer.printerStatus)) issues.push("printer-not-available");
+    if (printer.queueErrors > 0) warnings.push("queue-has-errors");
 
     return {
       ok: issues.length === 0,
       message:
-        issues.length === 0
+        issues.length === 0 && warnings.length === 0
           ? "המדפסת זמינה ומוכנה לקבלת עבודות הדפסה."
+          : issues.length === 0
+            ? "המדפסת נמצאה. קיימת אזהרה בתור ההדפסה, אך המערכת תנסה לשלוח אליה הדפסה."
           : "המדפסת נמצאה, אבל קיימת בעיית זמינות או שגיאה בתור ההדפסה.",
       printer,
-      issues
+      issues: [...issues, ...warnings],
+      warnings
     };
   }
 }
@@ -115,7 +120,7 @@ export class PrinterCompatibilityLayer {
     const isVirtual = detectVirtualPrinter(name, driverName, portName);
     const manufacturer = detectManufacturer(`${name} ${driverName}`);
     const connectionType = detectConnectionType(portName, isNetwork, isShared, isVirtual);
-    const available = driverValid && isAvailable(status, printerStatus, queueErrors);
+    const available = driverValid && isAvailable(status, printerStatus);
     const paperSizes = array(raw.PaperSizes);
     const capabilities = {
       color: PrinterCapabilities.value(raw.Color),
@@ -265,10 +270,14 @@ function detectVirtualPrinter(name: string, driverName: string, portName: string
   return /pdf|xps|onenote|fax|document writer/i.test(`${name} ${driverName} ${portName}`);
 }
 
-function isAvailable(status: string, printerStatus: string, queueErrors: number): boolean {
+function isAvailable(status: string, printerStatus: string): boolean {
   const value = `${status} ${printerStatus}`.toLowerCase();
-  if (queueErrors > 0) return false;
-  return !/(offline|error|paper|jam|paused|blocked|intervention|not available)/i.test(value);
+  return !hasBlockingPrinterStatus(value, "");
+}
+
+function hasBlockingPrinterStatus(status: string, printerStatus: string): boolean {
+  const value = `${status} ${printerStatus}`.toLowerCase();
+  return /(offline|paper|jam|paused|blocked|intervention|not available|door open|out of toner|no toner)/i.test(value);
 }
 
 function compatibilityNote(available: boolean, capabilities: PrinterCompatibilityInfo["capabilities"]): string {

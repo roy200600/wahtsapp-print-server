@@ -37,6 +37,7 @@ export function extractPdfPassword(text: string | undefined, allowBareText = fal
   if (!normalized) return undefined;
 
   const patterns = [
+    /(?:סיסמה|סיסמא|הסיסמה|הסיסמא|password|pass|pwd)\s*(?:היא|is)?\s*[:=\-]?\s*([^\s]{1,128})/i,
     /(?:סיסמה|סיסמא|סיסמת\s*הקובץ|password|pass|pwd)\s*[:=\-]?\s*([^\s]{1,128})/i,
     /(?:הסיסמה|הסיסמא)\s+([^\s]{1,128})/i
   ];
