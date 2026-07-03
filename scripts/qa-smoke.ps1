@@ -102,6 +102,7 @@ Assert-FileExists "docs\QA-1.0.33.md"
 Assert-FileExists "docs\QA-1.0.34.md"
 Assert-FileExists "docs\QA-1.0.35.md"
 Assert-FileExists "docs\QA-1.0.36.md"
+Assert-FileExists "docs\QA-1.0.37.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -189,6 +190,7 @@ const expectations = [
   [index.includes('<html lang="he" dir="rtl">'), 'index html must start in Hebrew RTL'],
   [index.includes('/styles.css?v=' + version), 'stylesheet cache version must match package version'],
   [index.includes('/app.js?v=' + version), 'app cache version must match package version'],
+  [app.includes('/sw.js?v=' + version), 'service worker registration version must match package version'],
   [sw.includes('my-pc-print-server-v' + cacheVersion), 'service worker cache version must match package version'],
   [css.includes('font-family: "Rubik"') || css.includes('font-family: Rubik'), 'Rubik must be the system font'],
   [css.includes('@media (prefers-reduced-motion: reduce)'), 'reduced motion must be respected'],
