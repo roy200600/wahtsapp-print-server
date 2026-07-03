@@ -107,6 +107,28 @@ function Test-ServerRunning($Port) {
   }
 }
 
+function Get-RunningServerStatus($Port) {
+  try {
+    return Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status" -TimeoutSec 2
+  } catch {
+    return $null
+  }
+}
+
+function Get-LocalPackageVersion {
+  $PackagePath = Join-Path $ProjectRoot "package.json"
+  if (-not (Test-Path $PackagePath)) {
+    return ""
+  }
+
+  try {
+    $Package = Get-Content -LiteralPath $PackagePath -Raw | ConvertFrom-Json
+    return [string]$Package.version
+  } catch {
+    return ""
+  }
+}
+
 function Get-PortOwnerProcesses($Port) {
   try {
     $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -134,6 +156,32 @@ function Test-ProjectServerProcess($Process) {
     $normalizedCommand.Contains("dist\main.js") -and
     $normalizedCommand.Contains($normalizedRoot)
   )
+}
+
+function Get-ProjectServerProcesses {
+  try {
+    return @(Get-CimInstance Win32_Process |
+      Where-Object {
+        $_.Name -eq "node.exe" -and
+        (Test-ProjectServerProcess $_)
+      })
+  } catch {
+    return @()
+  }
+}
+
+function Stop-ProjectServerProcesses {
+  $processes = @(Get-ProjectServerProcesses)
+  foreach ($process in $processes) {
+    Write-Host "Stopping MY-PC server process: PID $($process.ProcessId)"
+    try {
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    } catch {}
+  }
+
+  if ($processes.Count -gt 0) {
+    Start-Sleep -Seconds 2
+  }
 }
 
 function Stop-StaleProjectServer($Port) {
@@ -228,12 +276,20 @@ function Initialize-Ghostscript($ProjectRoot) {
 Initialize-UnicodeConsole
 
 $ConfiguredPort = Get-ConfiguredPort
-if (Test-ServerRunning $ConfiguredPort) {
-  Write-Host "MY-PC WhatsApp Print Server is already running: http://localhost:$ConfiguredPort"
-  if ($OpenBrowser) {
-    Start-Process "http://localhost:$ConfiguredPort"
+$RunningStatus = Get-RunningServerStatus $ConfiguredPort
+if ($RunningStatus) {
+  $LocalVersion = Get-LocalPackageVersion
+  $RunningVersion = [string]$RunningStatus.version
+  if ($LocalVersion -and $RunningVersion -eq $LocalVersion) {
+    Write-Host "MY-PC WhatsApp Print Server is already running: http://localhost:$ConfiguredPort"
+    if ($OpenBrowser) {
+      Start-Process "http://localhost:$ConfiguredPort"
+    }
+    return
   }
-  return
+
+  Write-Host "Running server version '$RunningVersion' does not match installed version '$LocalVersion'. Restarting server..."
+  Stop-ProjectServerProcesses
 }
 
 Stop-StaleProjectServer $ConfiguredPort
