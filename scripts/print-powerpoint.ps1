@@ -101,10 +101,14 @@ try {
 } finally {
   if ($presentation) {
     $presentation.Close()
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($presentation)
   }
   if ($powerPoint) {
     $powerPoint.Quit()
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($powerPoint)
   }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
   if (Test-Path -LiteralPath $tempFilePath) {
     Remove-Item -LiteralPath $tempFilePath -Force -ErrorAction SilentlyContinue
   }

@@ -44,13 +44,17 @@ try {
   $document = $word.Documents.Open($FilePath, $false, $true)
 
   for ($i = 0; $i -lt [Math]::Max(1, $Copies); $i++) {
-    $document.PrintOut()
+    $document.PrintOut($false)
   }
 } finally {
   if ($document) {
     $document.Close($false)
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($document)
   }
   if ($word) {
     $word.Quit()
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($word)
   }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
 }

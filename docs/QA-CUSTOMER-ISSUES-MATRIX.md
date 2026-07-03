@@ -4,8 +4,8 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Current Release
 
-- Customer release tag: `v1.0.51`
-- Latest repository commit: see Git tag `v1.0.51`
+- Customer release tag: `v1.0.52`
+- Latest repository commit: see Git tag `v1.0.52`
 - Latest full QA command: `npm run qa:smoke`
 
 ## Requirement Status
@@ -27,13 +27,13 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 | Empty `{}` print failure logs | Covered | `src/errorDetails.ts` expands non-Error objects with constructor/type/technical details; QA covers empty object errors. |
 | Legacy `.doc` support | Covered by configuration/security | `src/config.ts` defaults include `doc`; `src/security.ts` accepts CFB containers for legacy Office files. |
 | Images/JPG/JPEG/PNG | Covered to dry-run boundary | `scripts/qa-smoke.ps1` validates image dry-run script coverage. Physical printer output still requires field validation. |
-| Office files Word/Excel/PowerPoint | Covered to dry-run boundary | Default allowed types include Office formats and QA exercises Office print scripts in dry-run mode. Physical output still requires field validation. |
+| Office files Word/Excel/PowerPoint | Covered to dry-run boundary | Default allowed types include Office formats and QA exercises Office print scripts in dry-run mode. `v1.0.52` releases Office COM objects to reduce locked-file failures after print attempts. Physical output still requires field validation. |
 | Service-worker stale UI after update | Covered | `v1.0.41` stopped caching the HTML shell and added UI/server version mismatch recovery. |
 | Customer physical print output | Not fully proven | Requires real customer machine + real printer validation. Code QA cannot prove paper output, spooler behavior, driver quality, or printer-specific rendering. |
 
 ## Field Validation Still Required
 
-Run these on at least one real customer machine after updating to `v1.0.51`:
+Run these on at least one real customer machine after updating to `v1.0.52`:
 
 1. Open diagnostics and confirm SumatraPDF is available.
 2. Confirm Ghostscript is either available or clearly shown as a warning.
@@ -49,4 +49,4 @@ Run these on at least one real customer machine after updating to `v1.0.51`:
 ## Notes
 
 - The current evidence supports the application logic and diagnostics paths.
-- The goal should remain open until at least one customer environment validates physical printing after `v1.0.51`.
+- The goal should remain open until at least one customer environment validates physical printing after `v1.0.52`.

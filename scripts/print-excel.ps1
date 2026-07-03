@@ -121,11 +121,15 @@ try {
 } finally {
   if ($workbook) {
     $workbook.Close($false)
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook)
   }
   if ($excel) {
     $excel.Quit()
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
   }
   if ($previousDefaultPrinter -and $previousDefaultPrinter -ne $PrinterName) {
     Set-DefaultPrinter -Name $previousDefaultPrinter
   }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
 }
