@@ -72,6 +72,7 @@ Assert-FileExists "docs\QA-1.0.23.md"
 Assert-FileExists "docs\QA-1.0.24.md"
 Assert-FileExists "docs\QA-1.0.25.md"
 Assert-FileExists "docs\QA-1.0.26.md"
+Assert-FileExists "docs\QA-1.0.27.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -281,6 +282,123 @@ if (wrong.ok || !right.ok || pages !== 1) {
 '@
 
     node --input-type=module -e $pdfCryptoSmoke $cryptoPdf
+
+    $printOrderPasswordFlowSmoke = @'
+const fs = await import('node:fs');
+const os = await import('node:os');
+const path = await import('node:path');
+const { PrintOrderManager } = await import('./dist/printOrders.js');
+const { defaultConfig } = await import('./dist/config.js');
+const { databasePath, appPaths } = await import('./dist/paths.js');
+
+const sourcePdf = process.argv[1];
+const dbHadContent = fs.existsSync(databasePath);
+const dbBackup = dbHadContent ? fs.readFileSync(databasePath) : undefined;
+const runId = `qa-password-flow-${Date.now()}`;
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mypc-order-flow-'));
+
+function config() {
+  return {
+    ...defaultConfig,
+    printerName: 'QA Printer',
+    alertsEnabled: false,
+    allowedNumbers: [],
+    allowedGroups: [],
+    allowedFileTypes: [...defaultConfig.allowedFileTypes],
+    customerMessages: {
+      ...defaultConfig.customerMessages,
+      failed: 'FAILED',
+      queued: 'QUEUED',
+      fileAdded: 'ADDED',
+      canceled: 'CANCELED',
+      reminder: 'REMINDER'
+    }
+  };
+}
+
+function attachment(filePath, id, messageText = '') {
+  return {
+    id,
+    chatId: `${runId}@s.whatsapp.net`,
+    senderName: 'QA Customer',
+    senderPhone: '972500000000',
+    fileName: `${id}.pdf`,
+    mimeType: 'application/pdf',
+    extension: 'pdf',
+    sizeBytes: fs.statSync(filePath).size,
+    filePath,
+    messageText,
+    messageKey: `${runId}:${id}`
+  };
+}
+
+function cleanupManager(manager) {
+  const orders = manager.orders;
+  if (!orders) return;
+  for (const order of orders.values()) {
+    if (order.reminderTimer) clearInterval(order.reminderTimer);
+    if (order.expiryTimer) clearTimeout(order.expiryTimer);
+    if (order.promoTimer) clearTimeout(order.promoTimer);
+    if (order.customerMarketingTimer) clearTimeout(order.customerMarketingTimer);
+  }
+  orders.clear();
+}
+
+try {
+  fs.mkdirSync(appPaths.failedDir, { recursive: true });
+  fs.mkdirSync(appPaths.downloadsDir, { recursive: true });
+
+  const wrongPdf = path.join(tempDir, `${runId}-wrong.pdf`);
+  const rightPdf = path.join(tempDir, `${runId}-right.pdf`);
+  fs.copyFileSync(sourcePdf, wrongPdf);
+  fs.copyFileSync(sourcePdf, rightPdf);
+
+  const wrongMessages = [];
+  const wrongManager = new PrintOrderManager(config, async (_jid, text) => wrongMessages.push(text));
+  await wrongManager.receiveAttachment(attachment(wrongPdf, `${runId}-wrong`));
+
+  if (!wrongMessages.some((message) => message.includes(`${runId}-wrong.pdf`) && message.includes('1234'))) {
+    console.error({ stage: 'missing-password-prompt', wrongMessages });
+    process.exit(1);
+  }
+
+  const wrongHandled = await wrongManager.receiveText('972500000000', `${runId}@s.whatsapp.net`, 'wrong-password');
+  const wrongOrderStillExists = await wrongManager.receiveText('972500000000', `${runId}@s.whatsapp.net`, '1');
+  if (!wrongHandled || wrongOrderStillExists || !wrongMessages.includes('FAILED')) {
+    console.error({ stage: 'wrong-password-flow', wrongHandled, wrongOrderStillExists, wrongMessages });
+    process.exit(1);
+  }
+  cleanupManager(wrongManager);
+
+  const rightMessages = [];
+  const rightManager = new PrintOrderManager(config, async (_jid, text) => rightMessages.push(text));
+  await rightManager.receiveAttachment(attachment(rightPdf, `${runId}-right`));
+
+  const rightHandled = await rightManager.receiveText('972500000000', `${runId}@s.whatsapp.net`, '312830714');
+  if (!rightHandled || rightMessages.includes('QUEUED') || !rightMessages.some((message) => message.includes('PDF'))) {
+    console.error({ stage: 'right-password-flow', rightHandled, rightMessages });
+    process.exit(1);
+  }
+  cleanupManager(rightManager);
+} finally {
+  for (const dir of [appPaths.failedDir, appPaths.downloadsDir, tempDir]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const item of fs.readdirSync(dir)) {
+      if (item.includes(runId)) {
+        fs.rmSync(path.join(dir, item), { recursive: true, force: true });
+      }
+    }
+  }
+
+  if (dbHadContent) {
+    fs.writeFileSync(databasePath, dbBackup);
+  } else if (fs.existsSync(databasePath)) {
+    fs.rmSync(databasePath, { force: true });
+  }
+}
+'@
+
+    node --input-type=module -e $printOrderPasswordFlowSmoke $cryptoPdf
   } finally {
     Remove-Item -LiteralPath $cryptoDir -Recurse -Force -ErrorAction SilentlyContinue
   }
