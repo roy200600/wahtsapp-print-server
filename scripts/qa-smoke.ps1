@@ -100,6 +100,7 @@ Assert-FileExists "docs\QA-1.0.31.md"
 Assert-FileExists "docs\QA-1.0.32.md"
 Assert-FileExists "docs\QA-1.0.33.md"
 Assert-FileExists "docs\QA-1.0.34.md"
+Assert-FileExists "docs\QA-1.0.35.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -159,6 +160,7 @@ Test-TextContains "scripts\update-windows.ps1" "PDF compatibility mode will fall
 Test-TextContains "scripts\start-windows.ps1" "Initialize-Ghostscript"
 Test-TextContains "scripts\start-windows.ps1" "PDF compatibility mode will fall back to SumatraPDF"
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
+Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only"
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\alerts.ts" "972522250223"

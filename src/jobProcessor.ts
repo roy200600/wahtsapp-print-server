@@ -9,7 +9,7 @@ import { hasMessage, savePrintLog, setPrintStatus } from "./db.js";
 import { logger } from "./logger.js";
 import { savePrintDuration } from "./printMetrics.js";
 import { sendSystemAlert } from "./alerts.js";
-import { applyLicenseLimits, registerTrialDocument } from "./license.js";
+import { applyLicenseLimits, getLicenseStatus, registerTrialDocument } from "./license.js";
 import { describeError, errorDetailsForAlert } from "./errorDetails.js";
 
 export async function processAttachment(
@@ -37,9 +37,10 @@ export async function registerAttachment(
 
   const validation = await validateAttachment(attachment, config);
   if (!validation.ok) {
+    const failureReason = normalizeValidationReason(validation.reason);
     await moveTo(attachment.filePath, appPaths.failedDir);
-    sendSystemAlert(classifyValidationFailure(validation.reason), validation.reason, attachmentAlertContext(attachment, config));
-    return writeLog(attachment, config, createdAt, "rejected", validation.reason);
+    sendSystemAlert(classifyValidationFailure(failureReason), failureReason, attachmentAlertContext(attachment, config));
+    return writeLog(attachment, config, createdAt, "rejected", failureReason);
   }
 
   const trialCheck = registerTrialDocument(attachment.senderPhone);
@@ -229,6 +230,19 @@ function classifyValidationFailure(reason: string): string {
   if (reason.includes("not allowed")) return "סוג קובץ לא נתמך";
   if (reason.includes("content looks")) return "קובץ פגום";
   return "קובץ נדחה";
+}
+
+function normalizeValidationReason(reason: string): string {
+  const status = getLicenseStatus();
+  if (status.mode === "trial" && reason.includes("not allowed")) {
+    return `${reason}. Trial mode allows PDF/JPG/JPEG/PNG only. A valid license is required for Office, TXT, CSV, Excel, and PowerPoint files.`;
+  }
+
+  if (status.mode !== "licensed" && reason.includes("not allowed")) {
+    return `${reason}. A valid license is required before printing Office, TXT, CSV, Excel, and PowerPoint files.`;
+  }
+
+  return reason;
 }
 
 function attachmentAlertContext(attachment: IncomingAttachment, config: AppConfig) {
