@@ -45,17 +45,75 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $env:npm_config_unicode = "true"
 }
 
+$MinimumNodeVersion = [version]"22.13.0"
+
+function Test-NodeVersion($NodeExe) {
+  try {
+    $VersionText = (& $NodeExe -p "process.versions.node").Trim()
+    return ([version]$VersionText -ge $MinimumNodeVersion)
+  } catch {
+    return $false
+  }
+}
+
+function Install-PortableNodeRuntime($ProjectRoot) {
+  Write-Host "Node.js $MinimumNodeVersion or newer was not found. Downloading portable Node.js runtime..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+  $RuntimeParent = Join-Path $ProjectRoot "runtime"
+  $RuntimeRoot = Join-Path $RuntimeParent "node"
+  $ExtractRoot = Join-Path $env:TEMP "my-pc-node-runtime"
+  $NodeZip = Join-Path $env:TEMP "node-win-x64.zip"
+  New-Item -ItemType Directory -Force -Path $RuntimeParent | Out-Null
+
+  if (Test-Path $ExtractRoot) {
+    Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
+  }
+
+  $Index = Invoke-RestMethod "https://nodejs.org/dist/index.json"
+  $Version = $Index | Where-Object { $_.lts -and ($_.files -contains "win-x64-zip") } | Select-Object -First 1
+  if (-not $Version) {
+    throw "Could not find a Windows x64 Node.js LTS download."
+  }
+
+  $ZipUrl = "https://nodejs.org/dist/$($Version.version)/node-$($Version.version)-win-x64.zip"
+  try {
+    Invoke-WebRequest -Uri $ZipUrl -OutFile $NodeZip
+  } catch {
+    $FallbackVersion = "v22.13.1"
+    $FallbackUrl = "https://nodejs.org/dist/$FallbackVersion/node-$FallbackVersion-win-x64.zip"
+    Write-Host "Primary Node.js download failed: $ZipUrl"
+    Write-Host "Trying fallback Node.js runtime: $FallbackUrl"
+    Invoke-WebRequest -Uri $FallbackUrl -OutFile $NodeZip
+  }
+
+  Expand-Archive -Path $NodeZip -DestinationPath $ExtractRoot -Force
+  $ExtractedNode = Get-ChildItem $ExtractRoot -Directory | Where-Object { $_.Name -like "node-*-win-x64" } | Select-Object -First 1
+  if (-not $ExtractedNode) {
+    throw "Could not extract portable Node.js runtime."
+  }
+
+  if (Test-Path $RuntimeRoot) {
+    Remove-Item -LiteralPath $RuntimeRoot -Recurse -Force
+  }
+
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  Copy-Item -Path (Join-Path $ExtractedNode.FullName "*") -Destination $RuntimeRoot -Recurse -Force
+  return (Join-Path $RuntimeRoot "node.exe")
+}
+
 function Get-NodeExe() {
   $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
-  if (Test-Path $RuntimeNode) { return $RuntimeNode }
+  if ((Test-Path $RuntimeNode) -and (Test-NodeVersion $RuntimeNode)) { return $RuntimeNode }
   $Command = Get-Command "node.exe" -ErrorAction SilentlyContinue
-  if ($Command) { return $Command.Source }
-  throw "Node.js was not found. Run scripts\install-windows.ps1 first."
+  if ($Command -and (Test-NodeVersion $Command.Source)) { return $Command.Source }
+  return Install-PortableNodeRuntime $ProjectRoot
 }
 
 function Get-NpmCmd() {
+  $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
   $RuntimeNpm = Join-Path $ProjectRoot "runtime\node\npm.cmd"
-  if (Test-Path $RuntimeNpm) { return $RuntimeNpm }
+  if ((Test-Path $RuntimeNpm) -and (Test-Path $RuntimeNode) -and (Test-NodeVersion $RuntimeNode)) { return $RuntimeNpm }
   $Command = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
   if ($Command) { return $Command.Source }
   throw "npm was not found. Run scripts\install-windows.ps1 first."

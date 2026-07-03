@@ -44,23 +44,35 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $env:npm_config_unicode = "true"
 }
 
+$MinimumNodeVersion = [version]"22.13.0"
+
+function Test-NodeVersion($NodeExe) {
+  try {
+    $VersionText = (& $NodeExe -p "process.versions.node").Trim()
+    return ([version]$VersionText -ge $MinimumNodeVersion)
+  } catch {
+    return $false
+  }
+}
+
 function Get-NodeExe() {
   $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
-  if (Test-Path $RuntimeNode) {
+  if ((Test-Path $RuntimeNode) -and (Test-NodeVersion $RuntimeNode)) {
     return $RuntimeNode
   }
 
   $Command = Get-Command "node.exe" -ErrorAction SilentlyContinue
-  if ($Command) {
+  if ($Command -and (Test-NodeVersion $Command.Source)) {
     return $Command.Source
   }
 
-  throw "Node.js was not found. Run scripts\install-windows.ps1 first."
+  throw "Node.js $MinimumNodeVersion or newer was not found. Run scripts\install-windows.ps1 first."
 }
 
 function Get-NpmCmd() {
+  $RuntimeNode = Join-Path $ProjectRoot "runtime\node\node.exe"
   $RuntimeNpm = Join-Path $ProjectRoot "runtime\node\npm.cmd"
-  if (Test-Path $RuntimeNpm) {
+  if ((Test-Path $RuntimeNpm) -and (Test-Path $RuntimeNode) -and (Test-NodeVersion $RuntimeNode)) {
     return $RuntimeNpm
   }
 

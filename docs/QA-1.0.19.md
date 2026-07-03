@@ -26,7 +26,7 @@ This QA pass focuses on customer-reported failures from production logs:
 - Added password-protected PDF flow:
   - Detect encrypted PDFs before printing.
   - Ask the customer for the PDF password.
-  - Validate the password with SumatraPDF before printing.
+  - Initial implementation validated the password with SumatraPDF before printing. This was later replaced by PDF.js in 1.0.23 because SumatraPDF did not reliably validate passwords in headless mode.
   - Print only after the password is verified.
   - Mark invalid password cases as failed and alert the admin.
 - Added `-pwd` support to the PDF print profile script.

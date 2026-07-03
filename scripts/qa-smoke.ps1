@@ -40,6 +40,25 @@ function Test-TextContains {
   }
 }
 
+function Get-PdfCryptoPython {
+  $candidates = @($env:MYPC_QA_PYTHON, "python")
+
+  foreach ($candidate in $candidates) {
+    if (-not $candidate) {
+      continue
+    }
+
+    try {
+      & $candidate -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('pypdf') else 1)" 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        return $candidate
+      }
+    } catch {}
+  }
+
+  return $null
+}
+
 if (-not $SkipBuild) {
   npm run build
 }
@@ -49,6 +68,7 @@ Assert-FileExists "tools\SumatraPDF\SumatraPDF.exe"
 Assert-FileExists "docs\QA-1.0.19.md"
 Assert-FileExists "docs\QA-1.0.21.md"
 Assert-FileExists "docs\QA-1.0.22.md"
+Assert-FileExists "docs\QA-1.0.23.md"
 
 Test-PowerShellSyntax @(
   "scripts\print-pdf-profile.ps1",
@@ -70,6 +90,8 @@ Test-TextContains "public\styles.css" ":focus-visible"
 Test-TextContains "public\styles.css" "prefers-reduced-motion"
 Test-TextContains "public\styles.css" "overflow-x: hidden"
 Test-TextContains "public\styles.css" "@media (max-width:"
+Test-TextContains "package.json" "pdfjs-dist"
+Test-TextContains "package.json" ">=22.13.0"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-pwd"
 Test-TextContains "scripts\print-pdf-profile.ps1" "-sPDFPassword"
 Test-TextContains "scripts\print-pdf-profile.ps1" "DryRun"
@@ -140,5 +162,34 @@ if (!results.every(Boolean)) {
 '@
 
 node --input-type=module -e $pdfSecuritySmoke
+
+$pdfCryptoPython = Get-PdfCryptoPython
+if ($pdfCryptoPython) {
+  $cryptoDir = Join-Path ([System.IO.Path]::GetTempPath()) ("mypc-pdf-crypto-" + [System.Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $cryptoDir | Out-Null
+  $cryptoPdf = Join-Path $cryptoDir "encrypted.pdf"
+
+  try {
+    & $pdfCryptoPython -c "from pypdf import PdfWriter; import sys; w=PdfWriter(); w.add_blank_page(width=72,height=72); w.encrypt('312830714'); f=open(sys.argv[1], 'wb'); w.write(f); f.close()" $cryptoPdf
+
+    $pdfCryptoSmoke = @'
+const m = await import('./dist/pdfSecurity.js');
+const pdf = process.argv[1];
+const wrong = await m.verifyPdfPassword(pdf, 'wrong', 'tools/SumatraPDF/SumatraPDF.exe');
+const right = await m.verifyPdfPassword(pdf, '312830714', 'tools/SumatraPDF/SumatraPDF.exe');
+
+if (wrong.ok || !right.ok) {
+  console.error({ wrong, right });
+  process.exit(1);
+}
+'@
+
+    node --input-type=module -e $pdfCryptoSmoke $cryptoPdf
+  } finally {
+    Remove-Item -LiteralPath $cryptoDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+} else {
+  Write-Host "Skipping encrypted PDF password verification because Python pypdf is not available."
+}
 
 Write-Host "QA smoke checks passed."

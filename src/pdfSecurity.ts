@@ -1,11 +1,5 @@
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { rootDir } from "./paths.js";
-
-const execFileAsync = promisify(execFile);
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export function isPasswordProtectedPdf(filePath: string): boolean {
   const stat = fs.statSync(filePath);
@@ -59,46 +53,28 @@ export function extractPdfPassword(text: string | undefined, allowBareText = fal
 export async function verifyPdfPassword(
   filePath: string,
   password: string,
-  sumatraPath: string
+  _sumatraPath: string
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const resolvedSumatraPath = resolveSumatraPath(sumatraPath);
-  if (!resolvedSumatraPath || !fs.existsSync(resolvedSumatraPath)) {
-    return { ok: false, reason: "SumatraPDF was not found. Cannot verify encrypted PDF password." };
+  const normalizedPassword = String(password || "");
+  if (!normalizedPassword) {
+    return { ok: false, reason: "PDF password is missing or incorrect." };
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "my-pc-pdf-password-"));
-  const tempPdf = path.join(tempDir, "document.pdf");
-  const tempAppData = path.join(tempDir, "appdata");
-
+  const loadingTask = getDocument({
+    data: new Uint8Array(fs.readFileSync(filePath)),
+    password: normalizedPassword
+  });
   try {
-    fs.mkdirSync(tempAppData, { recursive: true });
-    fs.copyFileSync(filePath, tempPdf);
-
-    await execFileAsync(
-      resolvedSumatraPath,
-      ["-appdata", tempAppData, "-pwd", password, "-bench", tempPdf, "1"],
-      {
-        timeout: 15000,
-        windowsHide: true,
-        encoding: "utf8",
-        maxBuffer: 512 * 1024
-      }
-    );
-
+    const pdf = await loadingTask.promise;
+    await pdf.getPage(1);
     return { ok: true };
   } catch {
     return { ok: false, reason: "PDF password is missing or incorrect." };
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await loadingTask.destroy().catch(() => undefined);
   }
 }
 
 function cleanPassword(value: string): string {
   return value.trim().replace(/^["'“”‘’]+|["'“”‘’.,;:!?]+$/g, "");
-}
-
-function resolveSumatraPath(sumatraPath: string): string {
-  const normalized = String(sumatraPath || "").trim();
-  if (!normalized) return "";
-  return path.isAbsolute(normalized) ? normalized : path.join(rootDir, normalized);
 }

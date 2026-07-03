@@ -1,10 +1,13 @@
 {
   "name": "whatsapp-print-server",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "private": false,
   "description": "Windows WhatsApp print server MVP",
   "type": "module",
   "main": "dist/main.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
@@ -21,6 +24,7 @@
     "@whiskeysockets/baileys": "^6.7.18",
     "express": "^4.21.2",
     "file-type": "^19.6.0",
+    "pdfjs-dist": "^6.1.200",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4",
     "uuid": "^11.0.3",

@@ -45,22 +45,37 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $env:npm_config_unicode = "true"
 }
 
+$MinimumNodeVersion = [version]"22.13.0"
+
+function Test-NodeVersion($NodeExe) {
+  try {
+    $VersionText = (& $NodeExe -p "process.versions.node").Trim()
+    return ([version]$VersionText -ge $MinimumNodeVersion)
+  } catch {
+    return $false
+  }
+}
+
 function Initialize-NodeRuntime($ProjectRoot) {
   $NodeCommand = Get-Command "node.exe" -ErrorAction SilentlyContinue
   $NpmCommand = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
 
   if ($NodeCommand -and $NpmCommand) {
-    $script:NodeExe = $NodeCommand.Source
-    $script:NpmCmd = $NpmCommand.Source
-    Write-Host "Using installed Node.js: $($script:NodeExe)"
-    return
+    if (Test-NodeVersion $NodeCommand.Source) {
+      $script:NodeExe = $NodeCommand.Source
+      $script:NpmCmd = $NpmCommand.Source
+      Write-Host "Using installed Node.js: $($script:NodeExe)"
+      return
+    }
+
+    Write-Host "Installed Node.js is older than $MinimumNodeVersion. Using portable runtime instead."
   }
 
   $RuntimeRoot = Join-Path $ProjectRoot "runtime\node"
   $RuntimeNode = Join-Path $RuntimeRoot "node.exe"
   $RuntimeNpm = Join-Path $RuntimeRoot "npm.cmd"
 
-  if ((Test-Path $RuntimeNode) -and (Test-Path $RuntimeNpm)) {
+  if ((Test-Path $RuntimeNode) -and (Test-Path $RuntimeNpm) -and (Test-NodeVersion $RuntimeNode)) {
     $script:NodeExe = $RuntimeNode
     $script:NpmCmd = $RuntimeNpm
     Write-Host "Using bundled Node.js: $RuntimeNode"
