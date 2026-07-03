@@ -8,8 +8,21 @@ export async function stopPrintQueue(printerName: string): Promise<{ stopped: nu
     throw new Error("No printer selected");
   }
 
+  const command = buildStopPrintQueueCommand(printerName);
+  const { stdout } = await execFileAsync("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    command
+  ], { encoding: "utf8" });
+
+  return { stopped: Number(stdout.trim()) || 0, printerName };
+}
+
+export function buildStopPrintQueueCommand(printerName: string): string {
   const encodedPrinterName = Buffer.from(printerName, "utf8").toString("base64");
-  const command = [
+  return [
     `$printerName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPrinterName}'))`,
     "$jobs = Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue",
     "$count = 0",
@@ -21,14 +34,4 @@ export async function stopPrintQueue(printerName: string): Promise<{ stopped: nu
     "}",
     "Write-Output $count"
   ].join("; ");
-
-  const { stdout } = await execFileAsync("powershell.exe", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    command
-  ], { encoding: "utf8" });
-
-  return { stopped: Number(stdout.trim()) || 0, printerName };
 }

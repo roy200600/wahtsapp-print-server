@@ -103,6 +103,7 @@ Assert-FileExists "docs\QA-1.0.41.md"
 Assert-FileExists "docs\QA-1.0.42.md"
 Assert-FileExists "docs\QA-1.0.43.md"
 Assert-FileExists "docs\QA-1.0.44.md"
+Assert-FileExists "docs\QA-1.0.45.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -186,6 +187,7 @@ Test-TextContains "scripts\start-windows.ps1" "already in use by another process
 Test-TextContains "src\jobProcessor.ts" "copyFileSync(sourcePath, destinationPath)"
 Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only"
 Test-TextContains "src\printQueue.ts" "FromBase64String"
+Test-TextContains "src\printQueue.ts" "buildStopPrintQueueCommand"
 Test-TextContains "src\main.ts" "EADDRINUSE"
 Test-TextContains "src\alerts.ts" "972522250223"
 Test-TextContains "src\alerts.ts" "App version"
@@ -473,6 +475,29 @@ for (const expected of ['Unknown non-Error object was thrown.', 'constructorName
 '@
 
 Invoke-NodeSmoke "Error details smoke" $errorDetailsSmoke
+
+$printQueueCommandSmoke = @'
+const { buildStopPrintQueueCommand } = await import('./dist/printQueue.js');
+
+const printerName = 'Olivetti d-Copia 400 KX (USB)';
+const command = buildStopPrintQueueCommand(printerName);
+const expectedBase64 = Buffer.from(printerName, 'utf8').toString('base64');
+
+const failures = [];
+if (!command.includes(expectedBase64)) failures.push('printer name must be passed as base64');
+if (!command.includes('FromBase64String')) failures.push('command must decode the printer name inside PowerShell');
+if (command.includes('$args[0]')) failures.push('command must not depend on args that are not passed');
+if (command.includes(printerName)) failures.push('raw printer name must not be injected into the PowerShell command');
+if (!command.includes('Get-PrintJob -PrinterName $printerName')) failures.push('command must use the decoded printer variable');
+if (!command.includes('Write-Output $count')) failures.push('command must return the stopped job count');
+
+if (failures.length) {
+  console.error({ failures, command });
+  process.exit(1);
+}
+'@
+
+Invoke-NodeSmoke "Print queue command quoting smoke" $printQueueCommandSmoke
 
 $fileValidationSmoke = @'
 const fs = await import('node:fs');
