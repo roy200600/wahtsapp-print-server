@@ -101,6 +101,7 @@ Assert-FileExists "docs\QA-1.0.39.md"
 Assert-FileExists "docs\QA-1.0.40.md"
 Assert-FileExists "docs\QA-1.0.41.md"
 Assert-FileExists "docs\QA-1.0.42.md"
+Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
 
 Test-PowerShellSyntax @(
