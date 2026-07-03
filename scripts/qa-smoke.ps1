@@ -230,6 +230,28 @@ if (failed.length) {
 
 Invoke-NodeSmoke "UI static smoke" $uiStaticSmoke
 
+$printEngineSmoke = @'
+const { getPrintEngineStatus } = await import('./dist/printEngines.js');
+
+const status = getPrintEngineStatus();
+const failures = [];
+
+if (typeof status.ok !== 'boolean') failures.push('status.ok must be boolean');
+if (!status.sumatraPdf || typeof status.sumatraPdf.ok !== 'boolean') failures.push('sumatraPdf status is missing');
+if (!status.ghostscript || typeof status.ghostscript.ok !== 'boolean') failures.push('ghostscript status is missing');
+if (!Array.isArray(status.warnings)) failures.push('warnings must be an array');
+if (status.ok !== status.sumatraPdf.ok) failures.push('overall ok must follow SumatraPDF availability');
+if (!['configured', 'bundled', 'missing'].includes(status.sumatraPdf.source)) failures.push('invalid SumatraPDF source');
+if (!['bundled', 'system', 'missing'].includes(status.ghostscript.source)) failures.push('invalid Ghostscript source');
+
+if (failures.length) {
+  console.error({ failures, status });
+  process.exit(1);
+}
+'@
+
+Invoke-NodeSmoke "Print engine diagnostics smoke" $printEngineSmoke
+
 $hebrewName = -join ([char[]](0x05D1, 0x05D3, 0x05D9, 0x05E7, 0x05EA))
 $dryRunPdf = Join-Path ([System.IO.Path]::GetTempPath()) ("my-pc-" + $hebrewName + " pdf with spaces.pdf")
 Set-Content -LiteralPath $dryRunPdf -Encoding ASCII -Value "%PDF-1.4`ntrailer <<>>"
