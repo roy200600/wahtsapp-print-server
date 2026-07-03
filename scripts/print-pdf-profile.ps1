@@ -194,6 +194,21 @@ function New-SumatraSafePdfCopy {
 }
 
 function Find-Ghostscript {
+  $projectGhostscript = Join-Path $ProjectRoot "tools\Ghostscript"
+  $localCandidates = @(
+    (Join-Path $projectGhostscript "bin\gswin64c.exe"),
+    (Join-Path $projectGhostscript "bin\gswin32c.exe"),
+    (Join-Path $projectGhostscript "*\bin\gswin64c.exe"),
+    (Join-Path $projectGhostscript "*\bin\gswin32c.exe")
+  )
+
+  foreach ($pattern in $localCandidates) {
+    $match = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($match) {
+      return $match.FullName
+    }
+  }
+
   $command = Get-Command gswin64c.exe -ErrorAction SilentlyContinue
   if ($command) {
     return $command.Source

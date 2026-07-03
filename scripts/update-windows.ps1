@@ -144,6 +144,40 @@ function Initialize-SumatraPdf($ProjectRoot) {
   Copy-Item -LiteralPath $DownloadedExe.FullName -Destination $SumatraExe -Force
 }
 
+function Initialize-Ghostscript($ProjectRoot) {
+  $GhostscriptRoot = Join-Path $ProjectRoot "tools\Ghostscript"
+  $Existing = Get-ChildItem -Path (Join-Path $GhostscriptRoot "*\bin\gswin64c.exe") -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if (-not $Existing) {
+    $Existing = Get-ChildItem -Path (Join-Path $GhostscriptRoot "bin\gswin64c.exe") -ErrorAction SilentlyContinue |
+      Select-Object -First 1
+  }
+  if ($Existing) { return }
+
+  Write-Host "Ghostscript was not found. Downloading portable local Ghostscript runtime..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  New-Item -ItemType Directory -Force -Path $GhostscriptRoot | Out-Null
+
+  $GhostscriptVersion = "10.07.1"
+  $GhostscriptTag = "gs10071"
+  $InstallerName = "gs10071w64.exe"
+  $InstallerUrl = "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/$GhostscriptTag/$InstallerName"
+  $InstallerPath = Join-Path $env:TEMP $InstallerName
+  $InstallPath = Join-Path $GhostscriptRoot "gs$($GhostscriptVersion)"
+
+  Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath
+  $process = Start-Process -FilePath $InstallerPath -ArgumentList @("/S", "/D=$InstallPath") -Wait -PassThru -WindowStyle Hidden
+  if ($process.ExitCode -ne 0) {
+    throw "Ghostscript installer failed with exit code $($process.ExitCode)"
+  }
+
+  $InstalledExe = Get-ChildItem -Path (Join-Path $GhostscriptRoot "*\bin\gswin64c.exe") -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if (-not $InstalledExe) {
+    throw "Ghostscript was downloaded but gswin64c.exe was not found under $GhostscriptRoot"
+  }
+}
+
 Initialize-UnicodeConsole
 
 Write-Host "Stopping running server..."
@@ -195,6 +229,7 @@ $NodeExe = Get-NodeExe
 $NpmCmd = Get-NpmCmd
 Enable-PortableNodePath $ProjectRoot $NodeExe
 Initialize-SumatraPdf $ProjectRoot
+Initialize-Ghostscript $ProjectRoot
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {

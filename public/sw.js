@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-pc-print-server-v1-0-32";
+const CACHE_NAME = "my-pc-print-server-v1-0-33";
 const APP_SHELL = [
   "/",
   "/styles.css",
