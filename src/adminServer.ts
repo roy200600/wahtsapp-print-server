@@ -14,6 +14,7 @@ import {
   runUpdate
 } from "./maintenance.js";
 import { stopPrintQueue } from "./printQueue.js";
+import { getPrintEngineStatus } from "./printEngines.js";
 import { sendTestAlert } from "./alerts.js";
 import {
   activateLicense,
@@ -162,6 +163,10 @@ export function createAdminServer(whatsapp: WhatsAppService, setRuntimeConfig: (
     }
     const content = fs.readFileSync(filePath, "utf8");
     res.json({ name: safeName, content: content.slice(-20000) });
+  });
+
+  app.get("/api/diagnostics/print-engines", (_req, res) => {
+    res.json(getPrintEngineStatus());
   });
 
   app.get("/api/printers", async (_req, res) => {

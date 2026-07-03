@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.41";
+const APP_VERSION = "1.0.42";
 
 const state = {
   authenticated: false,
@@ -1738,6 +1738,12 @@ function safeFileName(value) {
 function renderDiagnostics() {
   return `
     <section class="two-column fade-in">
+      <article class="panel wide">
+        ${sectionTitle("stethoscope", "בדיקת מנועי הדפסה", "SumatraPDF, Ghostscript ומצב תאימות PDF")}
+        <div id="printEngineStatus" class="engine-status-grid">
+          ${emptyState("בודק רכיבי הדפסה...")}
+        </div>
+      </article>
       <article class="panel">
         ${sectionTitle("file-terminal", "קבצי לוג", "פלט טכני מלא")}
         <div class="file-list">${state.logFiles.map((file) => `<button data-log="${escapeHtml(file.name)}"><strong>${escapeHtml(file.name)}</strong><span>${formatSize(file.size)} · ${formatDate(file.modifiedAt)}</span></button>`).join("") || emptyState("אין קבצי לוג")}</div>
@@ -1751,12 +1757,47 @@ function renderDiagnostics() {
 }
 
 function bindDiagnostics() {
+  loadPrintEngineStatus();
   document.querySelectorAll("[data-log]").forEach((button) => {
     button.addEventListener("click", async () => {
       const log = await api(`/api/log-files/${encodeURIComponent(button.dataset.log)}`);
       $("#logPreview").textContent = log.content || "";
     });
   });
+}
+
+async function loadPrintEngineStatus() {
+  const host = $("#printEngineStatus");
+  if (!host) return;
+
+  try {
+    const status = await api("/api/diagnostics/print-engines");
+    host.innerHTML = `
+      ${engineStatusCard("SumatraPDF", status.sumatraPdf)}
+      ${engineStatusCard("Ghostscript", status.ghostscript)}
+      <div class="engine-status-card ${status.ok ? "ok" : "warn"}">
+        <strong>${status.ok ? "מוכן להדפסת PDF" : "נדרשת בדיקה"}</strong>
+        <span>${status.warnings?.length ? escapeHtml(status.warnings.join(" ")) : "כל רכיבי PDF הבסיסיים זמינים."}</span>
+      </div>
+    `;
+    renderIcons();
+  } catch (error) {
+    host.innerHTML = `<div class="engine-status-card warn"><strong>בדיקת מנועי הדפסה נכשלה</strong><span>${escapeHtml(error.message || String(error))}</span></div>`;
+  }
+}
+
+function engineStatusCard(label, engine) {
+  const ok = Boolean(engine?.ok);
+  return `
+    <div class="engine-status-card ${ok ? "ok" : "warn"}">
+      <div class="engine-status-title">
+        <i data-lucide="${ok ? "check-circle-2" : "triangle-alert"}"></i>
+        <strong>${escapeHtml(label)}</strong>
+      </div>
+      <span>${ok ? "זמין" : "חסר"}</span>
+      <code title="${escapeAttr(engine?.path || "")}">${escapeHtml(engine?.path || "לא נמצא")}</code>
+    </div>
+  `;
 }
 
 function renderAdvanced() {
