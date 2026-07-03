@@ -130,15 +130,12 @@ export function recoverInterruptedJobs(failedDir: string, printerName = ""): Int
       continue;
     }
 
-    try {
-      fs.mkdirSync(failedDir, { recursive: true });
-      const nextPath = uniqueDestinationPath(failedDir, path.basename(job.file_path));
-      fs.renameSync(job.file_path, nextPath);
-      job.file_path = nextPath;
+    const moveResult = moveInterruptedJobFile(job.file_path, failedDir);
+    if (moveResult.path !== job.file_path) {
+      job.file_path = moveResult.path;
       result.movedFiles++;
-    } catch (error) {
-      result.errors.push(error instanceof Error ? error.message : String(error));
     }
+    result.errors.push(...moveResult.errors);
   }
 
   if (result.recovered > 0 || result.errors.length > 0) {
@@ -178,4 +175,45 @@ function uniqueDestinationPath(destinationDir: string, fileName: string): string
   }
 
   return candidate;
+}
+
+function moveInterruptedJobFile(sourcePath: string, destinationDir: string): { path: string; errors: string[] } {
+  fs.mkdirSync(destinationDir, { recursive: true });
+  const destinationPath = uniqueDestinationPath(destinationDir, path.basename(sourcePath));
+  const errors: string[] = [];
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      fs.renameSync(sourcePath, destinationPath);
+      return { path: destinationPath, errors };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+      if (!isRetryableFileError(error) || attempt === 6) {
+        break;
+      }
+      waitSync(250 * attempt);
+    }
+  }
+
+  try {
+    fs.copyFileSync(sourcePath, destinationPath);
+    try {
+      fs.unlinkSync(sourcePath);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+    return { path: destinationPath, errors };
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    return { path: sourcePath, errors };
+  }
+}
+
+function isRetryableFileError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EBUSY" || code === "EPERM" || code === "EACCES" || code === "ENOTEMPTY";
+}
+
+function waitSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }

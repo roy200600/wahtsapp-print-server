@@ -111,6 +111,7 @@ Assert-FileExists "docs\QA-1.0.49.md"
 Assert-FileExists "docs\QA-1.0.50.md"
 Assert-FileExists "docs\QA-1.0.51.md"
 Assert-FileExists "docs\QA-1.0.52.md"
+Assert-FileExists "docs\QA-1.0.53.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -217,6 +218,9 @@ Test-TextContains "src\jobProcessor.ts" "Trial mode allows PDF/JPG/JPEG/PNG only
 Test-TextContains "src\printQueue.ts" "FromBase64String"
 Test-TextContains "src\printQueue.ts" "buildStopPrintQueueCommand"
 Test-TextContains "src\main.ts" "EADDRINUSE"
+Test-TextContains "src\db.ts" "moveInterruptedJobFile"
+Test-TextContains "src\db.ts" "copyFileSync(sourcePath, destinationPath)"
+Test-TextContains "src\db.ts" "isRetryableFileError"
 Test-TextContains "src\version.ts" "APP_VERSION"
 Test-TextContains "src\maintenance.ts" "return APP_VERSION"
 Test-TextContains "src\alerts.ts" "return APP_VERSION"
@@ -597,6 +601,81 @@ try {
 '@
 
 Invoke-NodeSmoke "File validation smoke" $fileValidationSmoke
+
+$startupRecoverySmoke = @'
+const fs = await import('node:fs');
+const os = await import('node:os');
+const path = await import('node:path');
+const { databasePath } = await import('./dist/paths.js');
+const { savePrintLog, recoverInterruptedJobs } = await import('./dist/db.js');
+
+const dbHadContent = fs.existsSync(databasePath);
+const dbBackup = dbHadContent ? fs.readFileSync(databasePath) : undefined;
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mypc-startup-recovery-'));
+const failedDir = path.join(tempDir, 'failed');
+const receivedFile = path.join(tempDir, 'received.pdf');
+const printingFile = path.join(tempDir, 'printing.pdf');
+
+try {
+  fs.writeFileSync(databasePath, JSON.stringify({ jobs: [] }, null, 2), 'utf8');
+  fs.writeFileSync(receivedFile, 'received');
+  fs.writeFileSync(printingFile, 'printing');
+
+  const base = {
+    chatId: 'qa',
+    senderName: 'QA',
+    senderPhone: '972500000000',
+    mimeType: 'application/pdf',
+    extension: 'pdf',
+    sizeBytes: 1,
+    printerName: 'QA Printer (USB)'
+  };
+
+  savePrintLog({
+    ...base,
+    id: 'qa-received',
+    messageKey: 'qa-received-key',
+    createdAt: '2026-07-03T00:00:00.000Z',
+    fileName: 'received.pdf',
+    filePath: receivedFile,
+    status: 'received'
+  });
+  savePrintLog({
+    ...base,
+    id: 'qa-printing',
+    messageKey: 'qa-printing-key',
+    createdAt: '2026-07-03T00:00:01.000Z',
+    fileName: 'printing.pdf',
+    filePath: printingFile,
+    status: 'printing'
+  });
+
+  const result = recoverInterruptedJobs(failedDir, 'QA Printer (USB)');
+  const stored = JSON.parse(fs.readFileSync(databasePath, 'utf8')).jobs;
+  const recoveredJobs = stored.filter((job) => job.id.startsWith('qa-'));
+
+  if (result.recovered !== 2 || result.movedFiles !== 2 || recoveredJobs.length !== 2) {
+    console.error({ stage: 'startup-recovery-counts', result, recoveredJobs });
+    process.exit(1);
+  }
+
+  for (const job of recoveredJobs) {
+    if (job.status !== 'failed' || !job.failure_reason || !job.file_path.startsWith(failedDir) || !fs.existsSync(job.file_path)) {
+      console.error({ stage: 'startup-recovery-job', job, failedDir });
+      process.exit(1);
+    }
+  }
+} finally {
+  if (dbHadContent) {
+    fs.writeFileSync(databasePath, dbBackup);
+  } else {
+    fs.rmSync(databasePath, { force: true });
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+'@
+
+Invoke-NodeSmoke "Startup recovery smoke" $startupRecoverySmoke
 
 $cryptoPdf = (Resolve-Path "tests\fixtures\encrypted-password-312830714.pdf").Path
 
