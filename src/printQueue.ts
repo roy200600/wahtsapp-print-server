@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -9,7 +10,7 @@ export async function stopPrintQueue(printerName: string): Promise<{ stopped: nu
   }
 
   const command = buildStopPrintQueueCommand(printerName);
-  const { stdout } = await execFileAsync("powershell.exe", [
+  const { stdout } = await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",

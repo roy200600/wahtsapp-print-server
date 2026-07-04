@@ -38,7 +38,12 @@ function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
 
   $ExistingPath = (($env:Path -split ";") |
     Where-Object { $_ -and ([string]::Compare($_, $ShimDir, $true) -ne 0) }) -join ";"
-  $env:Path = "$NodeDir;$ExistingPath"
+  $WindowsPaths = @(
+    (Join-Path $env:SystemRoot "System32"),
+    (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0"),
+    (Join-Path $env:SystemRoot "System32\Wbem")
+  ) | Where-Object { $_ -and (Test-Path $_) }
+  $env:Path = (@($NodeDir) + $WindowsPaths + @($ExistingPath)) -join ";"
   try {
     [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
     [Environment]::SetEnvironmentVariable("Path", $env:Path, "Process")

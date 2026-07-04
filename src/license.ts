@@ -125,6 +125,17 @@ export function getLicenseStatus(): LicenseStatus {
       };
     }
 
+    if (trialDaysLeft > 0) {
+      return {
+        ...base,
+        mode: "trial",
+        valid: true,
+        canRun: true,
+        features: ["trial"],
+        reason: result.reason
+      };
+    }
+
     return {
       ...base,
       mode: "invalid",
@@ -389,7 +400,7 @@ function validateLicense(license: LicenseFile, machineId: string): { valid: bool
     return { valid: false, reason: "License version is not supported." };
   }
 
-  if (license.payload.machineId !== machineId) {
+  if (!getAcceptedMachineIds(machineId).has(license.payload.machineId)) {
     return { valid: false, reason: "License belongs to another computer." };
   }
 
@@ -500,7 +511,8 @@ function getMachineId(): string {
 function readWindowsMachineGuid(): string {
   if (process.platform !== "win32") return "";
   try {
-    const output = execFileSync("reg.exe", [
+    const regPath = path.join(process.env.SystemRoot || process.env.WINDIR || "C:\\Windows", "System32", "reg.exe");
+    const output = execFileSync(fs.existsSync(regPath) ? regPath : "reg.exe", [
       "query",
       "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
       "/v",
@@ -511,6 +523,19 @@ function readWindowsMachineGuid(): string {
   } catch {
     return "";
   }
+}
+
+function getAcceptedMachineIds(machineId: string): Set<string> {
+  return new Set([machineId, getLegacyMachineId()]);
+}
+
+function getLegacyMachineId(): string {
+  return crypto
+    .createHash("sha256")
+    .update([os.hostname(), os.platform(), os.arch()].join("|"))
+    .digest("hex")
+    .slice(0, 32)
+    .toUpperCase();
 }
 
 function formatMachineCode(machineId: string): string {

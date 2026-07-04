@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import type { IncomingAttachment } from "./types.js";
 import { rootDir } from "./paths.js";
 import { getPdfPageCount } from "./pdfSecurity.js";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +43,7 @@ async function countPdfPages(filePath: string, password?: string): Promise<numbe
 async function countOfficePages(filePath: string, extension: string): Promise<number> {
   try {
     const { stdout } = await execFileAsync(
-      "powershell.exe",
+      getPowerShellPath(),
       [
         "-NoProfile",
         "-ExecutionPolicy",

@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { rootDir } from "./paths.js";
 import type { AppConfig } from "./types.js";
 import { assertPrinterAvailable } from "./printerCompatibility.js";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +14,7 @@ export async function runOfficePrintTest(type: "excel" | "powerpoint", config: A
   }
 
   await assertPrinterAvailable(config.printerName);
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",

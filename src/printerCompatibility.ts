@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -163,8 +164,47 @@ async function runPrinterProbe(): Promise<Array<Record<string, unknown>>> {
   const script = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$defaultPrinter = (Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1 -ExpandProperty Name)
-$printers = Get-Printer | ForEach-Object {
+$ErrorActionPreference = "Stop"
+$cimPrinters = @()
+$defaultPrinter = $null
+try {
+  $cimPrinters = @(Get-CimInstance Win32_Printer -ErrorAction Stop)
+  $defaultPrinter = ($cimPrinters | Where-Object { $_.Default -eq $true } | Select-Object -First 1 -ExpandProperty Name)
+} catch {}
+try {
+  $windowsPrinters = @(Get-Printer -ErrorAction Stop)
+} catch {
+  if ($cimPrinters.Count -gt 0) {
+    $windowsPrinters = @($cimPrinters | ForEach-Object {
+      [PSCustomObject]@{
+        Name = $_.Name
+        DriverName = $_.DriverName
+        PrinterStatus = $_.PrinterStatus
+        Shared = $_.Shared
+        PortName = $_.PortName
+        Location = $_.Location
+        Comment = $_.Comment
+      }
+    })
+  } else {
+    Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+    $windowsPrinters = @([System.Drawing.Printing.PrinterSettings]::InstalledPrinters | ForEach-Object {
+      $settings = New-Object System.Drawing.Printing.PrinterSettings
+      $settings.PrinterName = [string]$_
+      if ($settings.IsDefaultPrinter) { $defaultPrinter = [string]$_ }
+      [PSCustomObject]@{
+        Name = [string]$_
+        DriverName = ""
+        PrinterStatus = "Unknown"
+        Shared = $false
+        PortName = ""
+        Location = ""
+        Comment = ""
+      }
+    })
+  }
+}
+$printers = $windowsPrinters | ForEach-Object {
   $printer = $_
   $config = $null
   $jobs = @()
@@ -198,7 +238,7 @@ $printers = Get-Printer | ForEach-Object {
 }
 $printers | ConvertTo-Json -Depth 5
 `;
-  const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", script], {
+  const { stdout } = await execFileAsync(getPowerShellPath(), ["-NoProfile", "-Command", script], {
     encoding: "utf8",
     maxBuffer: 1024 * 1024 * 4
   });

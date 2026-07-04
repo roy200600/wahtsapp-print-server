@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { rootDir } from "./paths.js";
 import type { AppConfig, IncomingAttachment } from "./types.js";
 import { assertPrinterAvailable } from "./printerCompatibility.js";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -50,7 +51,7 @@ export async function printFile(attachment: IncomingAttachment, config: AppConfi
 
 async function printPdfWithSumatra(attachment: IncomingAttachment, config: AppConfig): Promise<void> {
   const profile = config.pdfPrintProfile;
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -88,7 +89,7 @@ async function printPdfWithSumatra(attachment: IncomingAttachment, config: AppCo
 }
 
 async function printImageWithDriver(filePath: string, config: AppConfig): Promise<void> {
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -104,7 +105,7 @@ async function printImageWithDriver(filePath: string, config: AppConfig): Promis
 }
 
 async function printTextWithDriver(filePath: string, config: AppConfig): Promise<void> {
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -120,7 +121,7 @@ async function printTextWithDriver(filePath: string, config: AppConfig): Promise
 }
 
 async function printWordWithDriver(filePath: string, config: AppConfig): Promise<void> {
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -136,7 +137,7 @@ async function printWordWithDriver(filePath: string, config: AppConfig): Promise
 }
 
 async function printExcelWithDriver(filePath: string, config: AppConfig): Promise<void> {
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -153,7 +154,7 @@ async function printExcelWithDriver(filePath: string, config: AppConfig): Promis
 
 async function printPowerPointWithDriver(filePath: string, config: AppConfig): Promise<void> {
   const profile = config.pdfPrintProfile;
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -187,7 +188,7 @@ async function printPowerPointWithDriver(filePath: string, config: AppConfig): P
 }
 
 async function printWithWindowsShell(filePath: string): Promise<void> {
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
