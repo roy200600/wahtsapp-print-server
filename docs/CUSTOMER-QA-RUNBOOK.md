@@ -1,6 +1,6 @@
 # Customer QA Runbook
 
-Use this runbook after installing or updating a customer machine to `v1.0.58` or newer.
+Use this runbook after installing or updating a customer machine to `v1.0.59` or newer.
 
 ## Quick Command
 

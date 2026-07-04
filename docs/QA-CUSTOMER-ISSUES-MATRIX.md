@@ -4,8 +4,8 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Current Release
 
-- Customer release tag: `v1.0.58`
-- Latest repository commit: see Git tag `v1.0.58`
+- Customer release tag: `v1.0.59`
+- Latest repository commit: see Git tag `v1.0.59`
 - Latest full QA command: `npm run qa:smoke`
 
 ## Requirement Status
@@ -22,6 +22,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 | Password PDF with absolute SumatraPDF path | Covered to dry-run boundary | `v1.0.58` initializes `$ProjectRoot` unconditionally so Ghostscript discovery does not fail when SumatraPDF is configured as an absolute path. |
 | System alert to configured manager | Covered | `src/alerts.ts` and QA verify configured alert recipients. |
 | Owner alert to `0522250223` | Covered | `src/alerts.ts` normalizes owner routing through `972522250223`; QA checks recipient inclusion. |
+| Customer should not receive internal system alerts | Covered | `v1.0.59` removes the job customer phone from alert recipients automatically, including local/international phone variants and owner-phone overlap. |
 | Alerts include server/customer/file/printer context | Covered | `formatSystemAlert` QA checks app version, computer, job, customer, file, size, printer, and extra details. |
 | Ghostscript missing customer failure | Mitigated | Install/update/start scripts bootstrap local Ghostscript; `/api/diagnostics/print-engines` and the diagnostics UI card report engine state. The PDF profile script falls back to SumatraPDF when Ghostscript cannot be used. `v1.0.51` prevents temp installer collisions during bootstrap. |
 | SumatraPDF missing customer failure | Mitigated | Install/update/start scripts bootstrap SumatraPDF through a unique temp folder; diagnostics reports missing SumatraPDF as a blocking PDF issue. |
@@ -37,7 +38,7 @@ This matrix tracks the active customer QA goal and separates proven code coverag
 
 ## Field Validation Still Required
 
-Run these on at least one real customer machine after updating to `v1.0.58`:
+Run these on at least one real customer machine after updating to `v1.0.59`:
 
 1. Open diagnostics and confirm SumatraPDF is available.
 2. Confirm Ghostscript is either available or clearly shown as a warning.
@@ -54,4 +55,4 @@ Run these on at least one real customer machine after updating to `v1.0.58`:
 ## Notes
 
 - The current evidence supports the application logic and diagnostics paths.
-- The goal should remain open until at least one customer environment validates physical printing and cloud update completion after `v1.0.58`.
+- The goal should remain open until at least one customer environment validates physical printing, alert routing, and cloud update completion after `v1.0.59`.

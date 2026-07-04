@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.58";
+const APP_VERSION = "1.0.59";
 const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
 
 const state = {

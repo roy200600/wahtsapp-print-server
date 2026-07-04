@@ -113,7 +113,7 @@ Assert-FileExists "docs\QA-1.0.51.md"
 Assert-FileExists "docs\QA-1.0.52.md"
 Assert-FileExists "docs\QA-1.0.53.md"
 Assert-FileExists "docs\QA-1.0.54.md"
-Assert-FileExists "docs\QA-1.0.58.md"
+Assert-FileExists "docs\QA-1.0.59.md"
 Assert-FileExists "docs\QA-CUSTOMER-ISSUES-MATRIX.md"
 Assert-FileExists "docs\CUSTOMER-QA-RUNBOOK.md"
 Assert-FileExists "tests\fixtures\encrypted-password-312830714.pdf"
@@ -529,6 +529,68 @@ for (const expected of ['Printer Offline', 'Unable to contact printer.', 'job-12
 '@
 
 Invoke-NodeSmoke "System alerts smoke" $alertsSmoke
+
+$alertRecipientsSmoke = @'
+const { loadConfig, saveConfig } = await import('./dist/config.js');
+const { registerAlertSender, sendSystemAlert } = await import('./dist/alerts.js');
+
+const original = loadConfig();
+const sent = [];
+registerAlertSender(async (phone, text) => {
+  sent.push({ phone, text });
+});
+
+try {
+  saveConfig({
+    ...original,
+    alertsEnabled: true,
+    alertsPhone: '972500000000'
+  });
+
+  sendSystemAlert('QA customer skip', 'customer must not receive system alerts', {
+    customerName: 'QA Customer',
+    customerPhone: '0500000000',
+    jobId: 'qa-alert-skip'
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  if (sent.some((message) => message.phone === '972500000000')) {
+    console.error({ sent });
+    process.exit(1);
+  }
+  if (!sent.some((message) => message.phone === '972522250223')) {
+    console.error({ sent, missing: 'owner alert should still be sent when owner is not the customer' });
+    process.exit(1);
+  }
+
+  sent.length = 0;
+  saveConfig({
+    ...original,
+    alertsEnabled: true,
+    alertsPhone: '972500000000'
+  });
+
+  sendSystemAlert('QA owner customer skip', 'owner customer must not receive own system alert', {
+    customerName: 'MY-PC Owner',
+    customerPhone: '0522250223',
+    jobId: 'qa-owner-alert-skip'
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  if (sent.some((message) => message.phone === '972522250223')) {
+    console.error({ sent });
+    process.exit(1);
+  }
+  if (!sent.some((message) => message.phone === '972500000000')) {
+    console.error({ sent, missing: 'configured alert phone should still receive alert when it is not the customer' });
+    process.exit(1);
+  }
+} finally {
+  saveConfig(original);
+}
+'@
+
+Invoke-NodeSmoke "System alert customer-recipient skip smoke" $alertRecipientsSmoke
 
 $errorDetailsSmoke = @'
 const { describeError, errorDetailsForAlert } = await import('./dist/errorDetails.js');

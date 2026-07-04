@@ -59,6 +59,10 @@ async function sendAlert(
       recipients.add(ownerAlertPhone);
     }
 
+    for (const customerPhoneCandidate of customerRecipientCandidates(context?.customerPhone)) {
+      recipients.delete(customerPhoneCandidate);
+    }
+
     if (recipients.size === 0) {
       return;
     }
@@ -127,4 +131,23 @@ function formatSize(bytes: number): string {
 
 function getAppVersion(): string {
   return APP_VERSION;
+}
+
+function customerRecipientCandidates(customerPhone: string | undefined): string[] {
+  const normalized = normalizePhoneForAlert(customerPhone);
+  if (!normalized) return [];
+
+  const candidates = new Set<string>([normalized]);
+  if (normalized.startsWith("972") && normalized.length > 3) {
+    candidates.add(`0${normalized.slice(3)}`);
+  }
+  if (normalized.startsWith("0") && normalized.length > 1) {
+    candidates.add(`972${normalized.slice(1)}`);
+  }
+
+  return [...candidates];
+}
+
+function normalizePhoneForAlert(phone: string | undefined): string {
+  return String(phone || "").replace(/[^\d]/g, "");
 }
