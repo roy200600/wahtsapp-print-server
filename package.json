@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-print-server",
-  "version": "1.0.61",
+  "version": "1.0.62",
   "private": false,
   "description": "Windows WhatsApp print server MVP",
   "type": "module",
@@ -11,7 +11,6 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
-    "qa:smoke": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/qa-smoke.ps1",
     "start": "node dist/main.js",
     "start:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
     "install:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows.ps1",

@@ -1,5 +1,4 @@
-const APP_VERSION = "1.0.61";
-const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
+const APP_VERSION = "1.0.62";
 
 const state = {
   authenticated: false,
@@ -1812,9 +1811,6 @@ function renderDiagnostics() {
     <section class="two-column fade-in">
       <article class="panel wide">
         ${sectionTitle("stethoscope", "בדיקת מנועי הדפסה", "SumatraPDF, Ghostscript ומצב תאימות PDF")}
-        <div class="inline-actions">
-          <button id="downloadCustomerQaBtn" type="button" class="btn btn-muted"><i data-lucide="download"></i><span>הפק דוח QA לקוח</span></button>
-        </div>
         <div id="printEngineStatus" class="engine-status-grid">
           ${emptyState("בודק רכיבי הדפסה...")}
         </div>
@@ -1833,104 +1829,12 @@ function renderDiagnostics() {
 
 function bindDiagnostics() {
   loadPrintEngineStatus();
-  $("#downloadCustomerQaBtn")?.addEventListener("click", downloadCustomerQaReport);
   document.querySelectorAll("[data-log]").forEach((button) => {
     button.addEventListener("click", async () => {
       const log = await api(`/api/log-files/${encodeURIComponent(button.dataset.log)}`);
       $("#logPreview").textContent = log.content || "";
     });
   });
-}
-
-function isVersionAtLeast(current, minimum) {
-  const currentParts = String(current || "0").split(".").map((part) => Number(part) || 0);
-  const minimumParts = String(minimum || "0").split(".").map((part) => Number(part) || 0);
-  const length = Math.max(currentParts.length, minimumParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const currentValue = currentParts[index] || 0;
-    const minimumValue = minimumParts[index] || 0;
-    if (currentValue > minimumValue) return true;
-    if (currentValue < minimumValue) return false;
-  }
-
-  return true;
-}
-
-async function downloadCustomerQaReport() {
-  setLoading(true, "מפיק דוח QA...");
-  try {
-    const [status, engines, printers, logFiles] = await Promise.all([
-      api("/api/status"),
-      api("/api/diagnostics/print-engines").catch((error) => ({ error: error.message || String(error) })),
-      api("/api/printers/details").catch((error) => ({ error: error.message || String(error) })),
-      api("/api/log-files").catch(() => [])
-    ]);
-    const serverVersion = status.version || "";
-    const serverVersionCheck = isVersionAtLeast(serverVersion, MINIMUM_DIAGNOSTICS_VERSION)
-      ? isVersionAtLeast(serverVersion, APP_VERSION)
-        ? {
-            name: "serverVersion",
-            status: "passed",
-            message: "Server version is current for this QA report."
-          }
-        : {
-            name: "serverVersion",
-            status: "warning",
-            message: "Server is compatible, but not on the latest recommended version."
-          }
-      : {
-          name: "serverVersion",
-          status: "failed",
-          message: "Server version is too old for print-engine diagnostics. Update or restart the customer installation."
-        };
-
-    const report = {
-      type: "my-pc-whatsapp-print-customer-qa",
-      generatedAt: new Date().toISOString(),
-      browserTime: new Date().toLocaleString("he-IL"),
-      minimumDiagnosticsVersion: MINIMUM_DIAGNOSTICS_VERSION,
-      recommendedVersion: APP_VERSION,
-      server: {
-        version: serverVersion,
-        whatsappConnected: Boolean(status.whatsapp?.connected),
-        selectedPrinter: status.config?.printerName || "",
-        licenseMode: status.license?.mode || ""
-      },
-      checks: [
-        {
-          ...serverVersionCheck,
-          details: {
-            currentVersion: serverVersion,
-            minimumDiagnosticsVersion: MINIMUM_DIAGNOSTICS_VERSION,
-            recommendedVersion: APP_VERSION
-          }
-        }
-      ],
-      printEngines: engines,
-      printers: Array.isArray(printers) ? printers.map((printer) => ({
-        name: printer.name,
-        manufacturer: printer.manufacturer,
-        status: printer.status,
-        printerStatus: printer.printerStatus,
-        available: printer.available,
-        isDefault: printer.isDefault,
-        connectionType: printer.connectionType,
-        queueCount: printer.queueCount,
-        queueErrors: printer.queueErrors,
-        compatibilityNote: printer.compatibilityNote
-      })) : printers,
-      logFiles
-    };
-
-    const businessName = safeFileName(state.registration?.businessName || "customer");
-    downloadJsonFile(report, `${businessName}-customer-qa-${Date.now()}.json`);
-    notify("success", "דוח QA נוצר והורד למחשב.");
-  } catch (error) {
-    notify("error", error.message || "הפקת דוח QA נכשלה.");
-  } finally {
-    setLoading(false);
-  }
 }
 
 async function loadPrintEngineStatus() {
