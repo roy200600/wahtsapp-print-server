@@ -64,14 +64,26 @@ export interface PrinterRolesConfig {
 }
 
 export type PrinterProfileRole = "default" | "blackWhite" | "color" | "special";
+export type PrinterProfileType = "windows" | "fiery";
+
+export interface FieryHotFolderDestination {
+  id: string;
+  label: string;
+  folderPath: string;
+  shortcutPath?: string;
+  isDefault: boolean;
+  enabled: boolean;
+}
 
 export interface PrinterProfileConfig {
   id: string;
   displayName: string;
   printerName: string;
+  printerType: PrinterProfileType;
   role: PrinterProfileRole;
   isPrimary: boolean;
   askCustomerColor: boolean;
+  fieryDestinations: FieryHotFolderDestination[];
   printProfile: PdfPrintProfile;
   officeProfile: OfficePrintProfile;
 }

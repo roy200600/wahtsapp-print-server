@@ -463,9 +463,11 @@ function normalizeTrialPrinterProfile(config: AppConfig): PrinterProfileConfig |
     id: "trial-printer",
     displayName: "מדפסת Trial",
     printerName: config.printerName,
+    printerType: "windows",
     role: "blackWhite",
     isPrimary: true,
     askCustomerColor: false,
+    fieryDestinations: [],
     printProfile: {
       ...config.pdfPrintProfile,
       colorMode: "grayscale",

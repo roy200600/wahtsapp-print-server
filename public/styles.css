@@ -687,6 +687,24 @@ a {
   display: none;
 }
 
+.fiery-destination-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(220px, 2fr) minmax(180px, 1.4fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+@media (max-width: 1100px) {
+  .fiery-destination-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .printer-card-section.active {
   display: grid;
 }

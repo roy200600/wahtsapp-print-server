@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.59";
+const APP_VERSION = "1.0.61";
 const MINIMUM_DIAGNOSTICS_VERSION = "1.0.42";
 
 const state = {
@@ -1083,9 +1083,11 @@ function createUiPrinterProfile(index) {
     id: `printer-${index + 1}`,
     displayName: index === 0 ? "מדפסת ראשית" : `מדפסת ${index + 1}`,
     printerName: index === 0 ? state.config.printerName || "" : "",
+    printerType: "windows",
     role: index === 0 ? "default" : "special",
     isPrimary: index === 0,
     askCustomerColor: false,
+    fieryDestinations: [],
     printProfile: { ...(state.config.pdfPrintProfile || {}) },
     officeProfile: { ...(state.config.officePrintProfile || {}) }
   };
@@ -1110,10 +1112,12 @@ function renderPrinterProfileCard(profile, index) {
         ${tabButton("general", "כללי")}
         ${tabButton("pdf", "פרופיל PDF")}
         ${tabButton("office", "Office")}
+        ${tabButton("fiery", "Fiery")}
       </div>
       <input type="hidden" name="${prefix}_id" value="${escapeAttr(profile.id || `printer-${index + 1}`)}" />
       ${tabSection("general", `
         ${inputField(`${prefix}_displayName`, "שם פנימי", profile.displayName || "")}
+        ${selectField(`${prefix}_printerType`, "סוג הדפסה", options([["windows","Windows Driver"],["fiery","Fiery / Sai Hot Folder"]], profile.printerType || "windows"))}
         ${selectField(`${prefix}_printerName`, "מדפסת Windows", printerOptions(profile.printerName, true))}
         ${selectField(`${prefix}_role`, "תפקיד", options([["default","ראשית"],["blackWhite","שחור־לבן"],["color","צבעונית"],["special","מיוחדת"]], profile.role))}
         ${checkField(`${prefix}_isPrimary`, "זו המדפסת הראשית", profile.isPrimary)}
@@ -1135,12 +1139,47 @@ function renderPrinterProfileCard(profile, index) {
         ${selectField(`${prefix}_powerPointOrientation`, "PowerPoint", options([["auto","אוטומטי"],["portrait","לאורך"],["landscape","לרוחב"]], officeProfile.powerPointOrientation))}
         ${checkField(`${prefix}_fitToWidth`, "התאם Office לרוחב דף", officeProfile.fitToWidth !== false)}
       `)}
+      ${tabSection("fiery", renderFieryDestinationFields(prefix, profile))}
     </article>
   `;
 }
 
 function printerRoleLabel(role) {
   return role === "default" ? "ראשית" : role === "blackWhite" ? "שחור־לבן" : role === "color" ? "צבעונית" : "מיוחדת";
+}
+
+function renderFieryDestinationFields(prefix, profile) {
+  const destinations = ensureFieryDestinations(profile.fieryDestinations || []);
+  return `
+    <label class="field full">
+      <span>Fiery / Sai Hot Folders</span>
+      <small>במצב Fiery הקבצים ממתינים לבחירת מנהל ומועתקים לתיקיית היעד שנבחרה.</small>
+    </label>
+    ${destinations.map((destination, index) => `
+      <div class="fiery-destination-row">
+        ${inputField(`${prefix}_fiery_${index}_label`, `יעד ${index + 1}`, destination.label || "")}
+        ${inputField(`${prefix}_fiery_${index}_folderPath`, "נתיב תיקייה", destination.folderPath || "")}
+        ${inputField(`${prefix}_fiery_${index}_shortcutPath`, "קיצור דרך מקור (אופציונלי)", destination.shortcutPath || "")}
+        ${checkField(`${prefix}_fiery_${index}_enabled`, "פעיל", destination.enabled !== false)}
+        ${checkField(`${prefix}_fiery_${index}_isDefault`, "ברירת מחדל", destination.isDefault)}
+      </div>
+    `).join("")}
+  `;
+}
+
+function ensureFieryDestinations(destinations) {
+  const rows = [...destinations];
+  while (rows.length < 6) {
+    rows.push({
+      id: `fiery-${rows.length + 1}`,
+      label: rows.length === 0 ? "A4 רגיל" : "",
+      folderPath: "",
+      shortcutPath: "",
+      enabled: rows.length === 0,
+      isDefault: rows.length === 0
+    });
+  }
+  return rows.slice(0, 6);
 }
 
 function printerCountOptions(selected) {
@@ -1339,9 +1378,11 @@ function readPrinterProfiles(form) {
       id: value("id", current.id) || `printer-${index + 1}`,
       displayName: value("displayName", current.displayName) || `מדפסת ${index + 1}`,
       printerName: value("printerName", current.printerName) || "",
+      printerType: value("printerType", current.printerType) || "windows",
       role: value("role", current.role) || (index === 0 ? "default" : "special"),
       isPrimary: checkedValue("isPrimary", current.isPrimary),
       askCustomerColor: checkedValue("askCustomerColor", current.askCustomerColor),
+      fieryDestinations: readFieryDestinations(form, prefix, current.fieryDestinations || []),
       printProfile: {
         colorMode: value("colorMode", currentPrintProfile.colorMode) || "grayscale",
         duplex: value("duplex", currentPrintProfile.duplex) || "simplex",
@@ -1367,6 +1408,33 @@ function readPrinterProfiles(form) {
   return profiles.map((profile, index) => ({
     ...profile,
     isPrimary: primaryIndex >= 0 ? index === primaryIndex : index === 0
+  }));
+}
+
+function readFieryDestinations(form, prefix, currentDestinations) {
+  const destinations = [];
+  for (let index = 0; index < 6; index++) {
+    const fieldPrefix = `${prefix}_fiery_${index}`;
+    const label = form.elements[`${fieldPrefix}_label`]?.value?.trim() || "";
+    const folderPath = form.elements[`${fieldPrefix}_folderPath`]?.value?.trim() || "";
+    const shortcutPath = form.elements[`${fieldPrefix}_shortcutPath`]?.value?.trim() || "";
+    const enabled = Boolean(form.elements[`${fieldPrefix}_enabled`]?.checked);
+    const isDefault = Boolean(form.elements[`${fieldPrefix}_isDefault`]?.checked);
+    if (!label && !folderPath && !shortcutPath) continue;
+    destinations.push({
+      id: currentDestinations[index]?.id || `fiery-${index + 1}`,
+      label: label || `Fiery ${index + 1}`,
+      folderPath,
+      shortcutPath,
+      enabled,
+      isDefault
+    });
+  }
+
+  const defaultIndex = destinations.reduce((selected, destination, index) => (destination.isDefault ? index : selected), -1);
+  return destinations.map((destination, index) => ({
+    ...destination,
+    isDefault: defaultIndex >= 0 ? index === defaultIndex : index === 0
   }));
 }
 

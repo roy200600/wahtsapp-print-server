@@ -1,6 +1,6 @@
 import os from "node:os";
-import type { AppConfig, IncomingAttachment, PrintLogEntry } from "./types.js";
-import { failRegisteredAttachment, registerAttachment, printRegisteredAttachment } from "./jobProcessor.js";
+import type { AppConfig, IncomingAttachment, PrintLogEntry, PrinterProfileConfig } from "./types.js";
+import { completeExternalPrintAttachment, failRegisteredAttachment, registerAttachment, printRegisteredAttachment } from "./jobProcessor.js";
 import { countAttachmentPages } from "./pageCounter.js";
 import { sendSystemAlert } from "./alerts.js";
 import { setPrintStatus } from "./db.js";
@@ -8,6 +8,15 @@ import { logger } from "./logger.js";
 import { adminIncomingPrintMessage, queuedMessage, renderCustomerMessage } from "./customerMessages.js";
 import { getLicenseStatus } from "./license.js";
 import { extractPdfPassword, isPasswordProtectedPdf, verifyPdfPassword } from "./pdfSecurity.js";
+import {
+  copyFieryFiles,
+  createFieryJobCode,
+  getActiveFieryDestinations,
+  getPrimaryFieryProfile,
+  parseFieryManagerReply,
+  renderFieryManagerPrompt,
+  type FieryPendingJob
+} from "./fieryHotFolders.js";
 
 type SendMessage = (remoteJid: string, text: string) => Promise<void>;
 
@@ -32,6 +41,7 @@ const sendFailureWarningThrottleMs = 15 * 60 * 1000;
 
 export class PrintOrderManager {
   private readonly orders = new Map<string, PendingPrintOrder>();
+  private readonly fieryJobs = new Map<string, FieryPendingJob & { timeout?: NodeJS.Timeout; order: PendingPrintOrder }>();
   private readonly sendFailureWarnings = new Map<string, number>();
 
   constructor(
@@ -68,6 +78,10 @@ export class PrintOrderManager {
   }
 
   async receiveText(phone: string, remoteJid: string, text: string): Promise<boolean> {
+    if (await this.receiveFieryManagerText(phone, remoteJid, text)) {
+      return true;
+    }
+
     const order = this.orders.get(phone);
     if (!order) {
       return false;
@@ -219,6 +233,12 @@ export class PrintOrderManager {
       extra: { files: context.files, pages: context.pages }
     });
 
+    const fieryProfile = getPrimaryFieryProfile(this.getConfig());
+    if (fieryProfile) {
+      await this.requestFieryDestination(order, readyAttachments, context.pages, fieryProfile);
+      return;
+    }
+
     const results: PrintLogEntry[] = [];
     for (const attachment of readyAttachments) {
       results.push(await printRegisteredAttachment(attachment, this.getConfig));
@@ -238,6 +258,141 @@ export class PrintOrderManager {
     if (this.orders.get(order.phone) === order) {
       this.orders.delete(order.phone);
     }
+  }
+
+  private async requestFieryDestination(
+    order: PendingPrintOrder,
+    attachments: PrintLogEntry[],
+    pages: number,
+    profile: PrinterProfileConfig
+  ): Promise<void> {
+    const destinations = getActiveFieryDestinations(profile);
+    const managerPhone = normalizeManagerPhone(this.getConfig().alertsPhone);
+    if (!managerPhone) {
+      this.failFieryOrder(order, attachments, "Fiery mode requires a system alerts phone for manager approval.");
+      await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+      return;
+    }
+
+    if (destinations.length === 0) {
+      this.failFieryOrder(order, attachments, "No active Fiery hot-folder destination is configured.");
+      await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+      return;
+    }
+
+    for (const attachment of attachments) {
+      setPrintStatus(attachment.id, "printing", "Waiting for Fiery destination approval.", profile.displayName || "Fiery");
+    }
+
+    const code = this.nextFieryCode();
+    const pending = {
+      code,
+      customerPhone: order.phone,
+      customerName: order.senderName,
+      customerJid: order.remoteJid,
+      files: attachments,
+      pages,
+      profile,
+      createdAt: Date.now(),
+      order,
+      timeout: undefined as NodeJS.Timeout | undefined
+    };
+
+    pending.timeout = setTimeout(() => {
+      this.finishFieryJob(code);
+      this.failFieryOrder(order, attachments, "Fiery destination approval expired.");
+      void this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+      void this.safeSend(`${managerPhone}@s.whatsapp.net`, `בחירת Fiery לעבודה ${code} פגה לאחר 30 דקות.`);
+    }, expiryMs);
+
+    this.fieryJobs.set(code, pending);
+    await this.safeSend(`${managerPhone}@s.whatsapp.net`, renderFieryManagerPrompt(pending));
+  }
+
+  private async receiveFieryManagerText(phone: string, remoteJid: string, text: string): Promise<boolean> {
+    const managerPhone = normalizeManagerPhone(this.getConfig().alertsPhone);
+    if (!managerPhone || normalizeManagerPhone(phone) !== managerPhone || this.fieryJobs.size === 0) {
+      return false;
+    }
+
+    const reply = parseFieryManagerReply(text);
+    const jobs = [...this.fieryJobs.values()];
+    const job = reply.code ? this.fieryJobs.get(reply.code) : jobs.length === 1 ? jobs[0] : undefined;
+    if (!job) {
+      await this.safeSend(remoteJid, "יש כמה עבודות Fiery ממתינות. נא לענות עם קוד עבודה, לדוגמה: F-1234 1");
+      return true;
+    }
+
+    if (reply.cancel) {
+      this.finishFieryJob(job.code);
+      this.failFieryOrder(job.order, job.files, "Fiery print job canceled by manager.");
+      await this.safeSend(remoteJid, `העבודה ${job.code} בוטלה.`);
+      await this.safeSend(job.customerJid, this.getConfig().customerMessages.canceled);
+      return true;
+    }
+
+    const destinations = getActiveFieryDestinations(job.profile);
+    const destination = reply.selection ? destinations[reply.selection - 1] : undefined;
+    if (!destination) {
+      await this.safeSend(remoteJid, renderFieryManagerPrompt(job));
+      return true;
+    }
+
+    try {
+      const startedAt = Date.now();
+      const result = copyFieryFiles(job, destination);
+      const durationMs = Date.now() - startedAt;
+      const completed: PrintLogEntry[] = [];
+      for (const attachment of job.files) {
+        completed.push(await completeExternalPrintAttachment(attachment, this.getConfig, durationMs, `Fiery: ${destination.label}`));
+      }
+
+      this.finishFieryJob(job.code);
+      await this.safeSend(remoteJid, [
+        `העבודה ${job.code} נשלחה ל-Fiery בהצלחה.`,
+        `יעד: ${destination.label}`,
+        `קבצים: ${result.copiedFiles.length}`
+      ].join("\n"));
+      await this.safeSend(job.customerJid, renderCustomerMessage(this.getConfig().customerMessages.printed, this.context(job.order)));
+      this.schedulePromo(job.order);
+      this.orders.delete(job.customerPhone);
+      logger.info({ code: job.code, destination, copiedFiles: result.copiedFiles, completed }, "Fiery hot-folder job completed");
+      return true;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.finishFieryJob(job.code);
+      this.failFieryOrder(job.order, job.files, reason);
+      await this.safeSend(remoteJid, `שליחת העבודה ${job.code} ל-Fiery נכשלה:\n${reason}`);
+      await this.safeSend(job.customerJid, this.getConfig().customerMessages.failed);
+      sendSystemAlert("Fiery hot-folder failed", reason, {
+        customerName: job.customerName,
+        customerPhone: job.customerPhone,
+        printerName: job.profile.displayName,
+        computerName: os.hostname()
+      });
+      return true;
+    }
+  }
+
+  private failFieryOrder(order: PendingPrintOrder, attachments: PrintLogEntry[], reason: string): void {
+    for (const attachment of attachments) {
+      failRegisteredAttachment(attachment, this.getConfig, reason);
+    }
+    this.orders.delete(order.phone);
+  }
+
+  private finishFieryJob(code: string): void {
+    const job = this.fieryJobs.get(code);
+    if (job?.timeout) clearTimeout(job.timeout);
+    this.fieryJobs.delete(code);
+  }
+
+  private nextFieryCode(): string {
+    let code = createFieryJobCode();
+    while (this.fieryJobs.has(code)) {
+      code = createFieryJobCode();
+    }
+    return code;
   }
 
   private resetTimers(order: PendingPrintOrder): void {
@@ -343,6 +498,10 @@ function classifyCustomerCommand(text: string): "print" | "more" | "cancel" | "u
 
 function isWhatsAppDisconnectedError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("WhatsApp is not connected");
+}
+
+function normalizeManagerPhone(phone: string): string {
+  return String(phone || "").replace(/[^\d]/g, "").replace(/^0/, "972");
 }
 
 function pdfPasswordPrompt(attachment: PrintLogEntry): string {

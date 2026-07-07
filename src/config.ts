@@ -1,6 +1,6 @@
 ﻿import fs from "node:fs";
 import { appPaths, settingsPath } from "./paths.js";
-import type { AppConfig, PdfPrintProfile, PrinterProfileConfig, PrinterProfileRole } from "./types.js";
+import type { AppConfig, FieryHotFolderDestination, PdfPrintProfile, PrinterProfileConfig, PrinterProfileRole } from "./types.js";
 
 export const defaultPdfPrintProfile = {
   colorMode: "color",
@@ -247,9 +247,11 @@ function normalizePrinterProfiles(config: AppConfig): PrinterProfileConfig[] {
       id: "primary",
       displayName: "מדפסת ראשית",
       printerName: config.printerName,
+      printerType: "windows",
       role: "default",
       isPrimary: true,
       askCustomerColor: false,
+      fieryDestinations: [],
       printProfile: normalizePdfPrintProfile(config),
       officeProfile: normalizeOfficePrintProfile(config.officePrintProfile)
     }
@@ -265,15 +267,36 @@ function normalizePrinterProfile(
     id: String(profile.id || `printer-${index + 1}`),
     displayName: String(profile.displayName || `מדפסת ${index + 1}`).trim(),
     printerName: String(profile.printerName || "").trim(),
+    printerType: pick(profile.printerType, ["windows", "fiery"], "windows") as PrinterProfileConfig["printerType"],
     role: pick(profile.role, ["default", "blackWhite", "color", "special"], index === 0 ? "default" : "special") as PrinterProfileRole,
     isPrimary: Boolean(profile.isPrimary),
     askCustomerColor: Boolean(profile.askCustomerColor),
+    fieryDestinations: normalizeFieryDestinations(profile.fieryDestinations),
     printProfile: normalizePdfPrintProfile({
       ...config,
       pdfPrintProfile: profile.printProfile ?? config.pdfPrintProfile
     }),
     officeProfile: normalizeOfficePrintProfile(profile.officeProfile ?? config.officePrintProfile)
   };
+}
+
+function normalizeFieryDestinations(destinations: FieryHotFolderDestination[] | undefined): FieryHotFolderDestination[] {
+  const normalized = (Array.isArray(destinations) ? destinations : [])
+    .map((destination, index) => ({
+      id: String(destination.id || `fiery-${index + 1}`),
+      label: String(destination.label || `יעד Fiery ${index + 1}`).trim(),
+      folderPath: String(destination.folderPath || "").trim(),
+      shortcutPath: destination.shortcutPath ? String(destination.shortcutPath).trim() : "",
+      isDefault: Boolean(destination.isDefault),
+      enabled: destination.enabled !== false
+    }))
+    .filter((destination) => destination.label || destination.folderPath);
+
+  const hasDefault = normalized.some((destination) => destination.isDefault);
+  return normalized.map((destination, index) => ({
+    ...destination,
+    isDefault: hasDefault ? destination.isDefault : index === 0
+  }));
 }
 
 function normalizePricing(pricing: Partial<AppConfig["pricing"]> | undefined) {

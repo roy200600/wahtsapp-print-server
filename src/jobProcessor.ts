@@ -81,6 +81,24 @@ export async function printRegisteredAttachment(
   }
 }
 
+export async function completeExternalPrintAttachment(
+  attachment: PrintLogEntry,
+  getConfig: () => AppConfig,
+  durationMs: number,
+  printerName?: string
+): Promise<PrintLogEntry> {
+  const config = applyLicenseLimits(getConfig());
+  const targetPrinterName = printerName || config.printerName;
+  const printedPath = await moveTo(attachment.filePath, appPaths.printedDir);
+  setPrintStatus(attachment.id, "printed", undefined, targetPrinterName);
+  savePrintDuration(attachment.id, durationMs);
+  if (config.deleteAfterPrint) {
+    await wait(2000);
+    deletePrintedArtifacts(attachment.filePath, printedPath, attachment.id);
+  }
+  return { ...attachment, status: "printed", filePath: printedPath, printerName: targetPrinterName };
+}
+
 export function failRegisteredAttachment(
   attachment: PrintLogEntry,
   getConfig: () => AppConfig,
