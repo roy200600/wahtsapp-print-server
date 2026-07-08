@@ -20,7 +20,9 @@ import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
 import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
-import { runUpdate } from "./maintenance.js";
+import { checkForUpdates, runUpdate } from "./maintenance.js";
+import { APP_VERSION } from "./version.js";
+import { captureScreen, formatRemoteSupportCaption, startRemoteSupportSession } from "./remoteSupport.js";
 
 type StatusListener = (state: WhatsAppRuntimeState) => void;
 
@@ -150,6 +152,36 @@ export class WhatsAppService {
       return;
     }
 
+    if (text && isOwnerVersionCommand(senderPhone, text)) {
+      await this.handleOwnerVersionCommand(remoteJid, senderPhone);
+      return;
+    }
+
+    if (text && isOwnerStatusCommand(senderPhone, text)) {
+      await this.handleOwnerStatusCommand(remoteJid, senderPhone);
+      return;
+    }
+
+    if (text && isOwnerCommandMapCommand(senderPhone, text)) {
+      await this.handleOwnerCommandMapCommand(remoteJid, senderPhone);
+      return;
+    }
+
+    if (text && isOwnerFullDiagnosticsCommand(senderPhone, text)) {
+      await this.handleOwnerFullDiagnosticsCommand(remoteJid, senderPhone);
+      return;
+    }
+
+    if (text && isOwnerScreenshotCommand(senderPhone, text)) {
+      await this.handleOwnerScreenshotCommand(remoteJid, senderPhone);
+      return;
+    }
+
+    if (text && isOwnerRemoteSupportCommand(senderPhone, text)) {
+      await this.handleOwnerRemoteSupportCommand(remoteJid, senderPhone);
+      return;
+    }
+
     if (text && isOwnerLogExportCommand(senderPhone, text)) {
       await this.handleOwnerLogExportCommand(remoteJid, senderPhone);
       return;
@@ -236,6 +268,109 @@ export class WhatsAppService {
       const message = error instanceof Error ? error.message : String(error);
       logger.error({ err: error, senderPhone }, "Owner cloud update command failed");
       await this.sendText(targetJid, `עדכון ענן נכשל: ${message}`).catch(() => {});
+    }
+  }
+
+  private async handleOwnerVersionCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
+    try {
+      const license = getLicenseStatus();
+      const update = await checkForUpdates();
+      await this.sendText(targetJid, [
+        "📦 גרסת שרת",
+        "",
+        `גרסה מותקנת: ${APP_VERSION}`,
+        `גרסה זמינה ב-GitHub: ${update.latest}`,
+        `עדכון זמין: ${update.available ? "כן" : "לא"}`,
+        `רישוי: ${license.mode}`,
+        `פעיל: ${license.canRun ? "כן" : "לא"}`,
+        `קוד מחשב: ${license.machineCode}`
+      ].join("\n"));
+      logger.warn({ senderPhone }, "Owner version command accepted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner version command failed");
+      await this.sendText(targetJid, `בדיקת גרסה נכשלה: ${message}`).catch(() => {});
+    }
+  }
+
+  private async handleOwnerStatusCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
+    try {
+      const license = getLicenseStatus();
+      await this.sendText(targetJid, [
+        "🖥 סטטוס שרת",
+        "",
+        `גרסה: ${APP_VERSION}`,
+        `WhatsApp: ${this.state.connected ? "מחובר" : "מנותק"}`,
+        `שגיאה אחרונה: ${this.state.lastError || "אין"}`,
+        `רישוי: ${license.mode}`,
+        `אפשר להפעיל: ${license.canRun ? "כן" : "לא"}`,
+        `תוקף: ${license.expiresAt || "ללא"}`,
+        `ימי ניסיון שנותרו: ${license.trialDaysLeft}`,
+        `קוד מחשב: ${license.machineCode}`
+      ].join("\n"));
+      logger.warn({ senderPhone }, "Owner status command accepted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner status command failed");
+      await this.sendText(targetJid, `בדיקת סטטוס נכשלה: ${message}`).catch(() => {});
+    }
+  }
+
+  private async handleOwnerCommandMapCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
+    await this.sendText(targetJid, ownerCommandMapText());
+    logger.warn({ senderPhone }, "Owner command map sent");
+  }
+
+  private async handleOwnerFullDiagnosticsCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    await this.handleOwnerStatusCommand(remoteJid, senderPhone);
+    await this.handleOwnerVersionCommand(remoteJid, senderPhone);
+    await this.handleOwnerLogExportCommand(remoteJid, senderPhone);
+    logger.warn({ senderPhone }, "Owner full diagnostics command accepted");
+  }
+
+  private async handleOwnerScreenshotCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
+    try {
+      if (!this.socket) {
+        throw new Error("WhatsApp is not connected");
+      }
+
+      await this.sendText(targetJid, "צילום מסך התקבל. יוצר צילום ושולח אליך...");
+      const screenshotPath = await captureScreen();
+      await this.socket.sendMessage(targetJid, {
+        image: fs.readFileSync(screenshotPath),
+        caption: `📸 צילום מסך מהשרת\nגרסה: ${APP_VERSION}\nזמן: ${new Date().toLocaleString("he-IL")}`
+      });
+      logger.warn({ senderPhone, screenshotPath }, "Owner screenshot command accepted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner screenshot command failed");
+      await this.sendText(targetJid, `צילום מסך נכשל: ${message}`).catch(() => {});
+    }
+  }
+
+  private async handleOwnerRemoteSupportCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
+    try {
+      if (!this.socket) {
+        throw new Error("WhatsApp is not connected");
+      }
+
+      await this.sendText(targetJid, "פקודת תמיכה מרחוק התקבלה. סוגר TeamViewer פעיל, פותח QS ושולח צילום מסך...");
+      const result = await startRemoteSupportSession();
+      await this.socket.sendMessage(targetJid, {
+        image: fs.readFileSync(result.screenshotPath),
+        caption: formatRemoteSupportCaption()
+      });
+      logger.warn({ senderPhone, teamViewerPath: result.teamViewerPath, screenshotPath: result.screenshotPath }, "Owner remote support command accepted");
+      sendSystemAlert("תמיכה מרחוק הופעלה", `TeamViewer QS הופעל מרחוק על ידי ${senderPhone}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner remote support command failed");
+      await this.sendText(targetJid, `פתיחת תמיכה מרחוק נכשלה: ${message}`).catch(() => {});
     }
   }
 
@@ -378,16 +513,8 @@ function safeContentText(message?: proto.IMessage | null): string | undefined {
 }
 
 function isOwnerCloudUpdateCommand(senderPhone: string, text: string): boolean {
-  const ownerPhones = new Set(["0522250223", "972522250223", "522250223"]);
-  if (!ownerPhones.has(normalizePhone(senderPhone))) {
-    return false;
-  }
-
-  const normalized = text
-    .trim()
-    .toLowerCase()
-    .replace(/[.!?؟،,;:״"']/g, "")
-    .replace(/\s+/g, " ");
+  if (!isOwnerPhone(senderPhone)) return false;
+  const normalized = normalizeOwnerCommand(text);
 
   return new Set([
     "עדכן",
@@ -406,18 +533,100 @@ function isOwnerCloudUpdateCommand(senderPhone: string, text: string): boolean {
 }
 
 function isOwnerLogExportCommand(senderPhone: string, text: string): boolean {
-  const ownerPhones = new Set(["0522250223", "972522250223", "522250223"]);
-  if (!ownerPhones.has(normalizePhone(senderPhone))) {
-    return false;
-  }
+  if (!isOwnerPhone(senderPhone)) return false;
+  const normalized = normalizeOwnerCommand(text);
 
-  const normalized = text
+  return new Set(["223", "log 223", "logs 223", "לוגים 223", "logs", "log", "לוגים"]).has(normalized);
+}
+
+function isOwnerVersionCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set(["ver", "version", "v", "גרסה", "גירסה", "איזה גרסה", "מה הגרסה"]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerStatusCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set(["status", "stat", "st", "סטטוס", "מצב", "שרת", "server"]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerCommandMapCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set(["help", "commands", "cmd", "פקודות", "עזרה", "מפה", "map"]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerFullDiagnosticsCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set(["all", "full", "diag", "diagnostics", "הכל", "אבחון", "דיאגנוסטיקה"]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerScreenshotCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set(["screen", "screenshot", "ss", "צילום מסך", "מסך", "צלם מסך"]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerRemoteSupportCommand(senderPhone: string, text: string): boolean {
+  if (!isOwnerPhone(senderPhone)) return false;
+  return new Set([
+    "tv",
+    "qs",
+    "teamviewer",
+    "team viewer",
+    "teamviewer qs",
+    "support",
+    "remote",
+    "remote support",
+    "תמיכה",
+    "תמיכה מרחוק",
+    "טים",
+    "טים ויואר",
+    "טימויואר",
+    "טימוויואר",
+    "פתח תמיכה"
+  ]).has(normalizeOwnerCommand(text));
+}
+
+function isOwnerPhone(senderPhone: string): boolean {
+  return new Set(["0522250223", "972522250223", "522250223"]).has(normalizePhone(senderPhone));
+}
+
+function normalizeOwnerCommand(text: string): string {
+  return text
     .trim()
     .toLowerCase()
     .replace(/[.!?؟،,;:״"']/g, "")
     .replace(/\s+/g, " ");
+}
 
-  return new Set(["223", "log 223", "logs 223", "לוגים 223"]).has(normalized);
+function ownerCommandMapText(): string {
+  return [
+    "🧭 פקודות ניהול MY-PC",
+    "",
+    "עדכון ענן:",
+    "עדכן | עדכון | ענן | update | upd | up | mypc update",
+    "",
+    "גרסה:",
+    "גרסה | גירסה | ver | version | v",
+    "",
+    "סטטוס שרת:",
+    "סטטוס | מצב | status | stat | st",
+    "",
+    "לוגים:",
+    "223 | לוגים | logs | log 223",
+    "",
+    "דיאגנוסטיקה מלאה:",
+    "הכל | all | full | diag",
+    "",
+    "צילום מסך:",
+    "צילום מסך | מסך | screenshot | screen | ss",
+    "",
+    "תמיכה מרחוק:",
+    "תמיכה | תמיכה מרחוק | qs | tv | teamviewer | support",
+    "",
+    "מפת פקודות:",
+    "פקודות | עזרה | help | commands | cmd",
+    "",
+    "כל הפקודות האלה עובדות רק מהמספר המורשה של MY-PC."
+  ].join("\n");
 }
 
 function logMimeType(fileName: string): string {

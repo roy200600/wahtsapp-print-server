@@ -238,6 +238,39 @@ function Initialize-Ghostscript($ProjectRoot) {
   }
 }
 
+function Initialize-TeamViewerQuickSupport($ProjectRoot) {
+  $TeamViewerDir = Join-Path $ProjectRoot "tools\TeamViewerQS"
+  $TeamViewerExe = Join-Path $TeamViewerDir "TeamViewerQS.exe"
+  if (Test-Path $TeamViewerExe) {
+    Write-Host "Using bundled TeamViewer QS: $TeamViewerExe"
+    return
+  }
+
+  Write-Host "TeamViewer QS was not found. Downloading portable TeamViewer QuickSupport..."
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  New-Item -ItemType Directory -Force -Path $TeamViewerDir | Out-Null
+
+  $DownloadUrls = @(
+    "https://download.teamviewer.com/download/TeamViewerQS.exe"
+  )
+
+  $LastError = $null
+  foreach ($Url in $DownloadUrls) {
+    try {
+      Invoke-WebRequest -Uri $Url -OutFile $TeamViewerExe
+      if ((Test-Path $TeamViewerExe) -and ((Get-Item $TeamViewerExe).Length -gt 1024KB)) {
+        Write-Host "TeamViewer QS installed: $TeamViewerExe"
+        return
+      }
+      Remove-Item -LiteralPath $TeamViewerExe -Force -ErrorAction SilentlyContinue
+    } catch {
+      $LastError = $_.Exception.Message
+    }
+  }
+
+  Write-Warning "TeamViewer QS download failed. Remote support command will report that QS is missing. Last error: $LastError"
+}
+
 function New-AppShortcut($ProjectRoot, $ShortcutPath) {
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
@@ -347,6 +380,7 @@ foreach ($dir in @("auth", "config", "data", "downloads", "printed", "failed", "
 
 Initialize-SumatraPdf $ProjectRoot
 Initialize-Ghostscript $ProjectRoot
+Initialize-TeamViewerQuickSupport $ProjectRoot
 
 if (-not (Test-Path "config\settings.json") -and (Test-Path "config\settings.example.json")) {
   Copy-Item "config\settings.example.json" "config\settings.json"
