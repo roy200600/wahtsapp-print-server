@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-print-server",
-  "version": "1.0.66",
+  "version": "1.0.67",
   "private": false,
   "description": "Windows WhatsApp print server MVP",
   "type": "module",

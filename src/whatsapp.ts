@@ -40,10 +40,7 @@ export class WhatsAppService {
 
   constructor(private readonly getConfig: () => AppConfig) {
     this.printOrders = new PrintOrderManager(getConfig, async (remoteJid, text) => {
-      if (!this.socket) {
-        throw new Error("WhatsApp is not connected");
-      }
-      await this.socket.sendMessage(remoteJid, { text });
+      await this.sendText(remoteJid, text);
     });
   }
 
@@ -71,10 +68,7 @@ export class WhatsAppService {
     });
 
     registerAlertSender(async (phone, text) => {
-      if (!this.socket) {
-        throw new Error("WhatsApp is not connected");
-      }
-      await this.socket.sendMessage(`${phone}@s.whatsapp.net`, { text });
+      await this.sendTextToPhone(phone, text);
     });
 
     this.socket.ev.on("creds.update", saveCreds);
@@ -149,8 +143,7 @@ export class WhatsAppService {
 
     const text = safeContentText(message.message);
     const remoteJid = message.key.remoteJid ?? "";
-    const senderJid = message.key.participant ?? message.key.remoteJid ?? "";
-    const senderPhone = normalizePhone(senderJid.split("@")[0] ?? "");
+    const senderPhone = this.senderPhone(message);
 
     if (text && isOwnerCloudUpdateCommand(senderPhone, text)) {
       await this.handleOwnerCloudUpdateCommand(remoteJid, senderPhone);
@@ -193,8 +186,7 @@ export class WhatsAppService {
     buffer: Buffer
   ): Promise<IncomingAttachment> {
     const remoteJid = message.key.remoteJid ?? "";
-    const senderJid = message.key.participant ?? message.key.remoteJid ?? "";
-    const senderPhone = normalizePhone(senderJid.split("@")[0] ?? "");
+    const senderPhone = this.senderPhone(message);
     const senderName = message.pushName ?? senderPhone;
     const groupName = remoteJid.endsWith("@g.us") ? await this.getGroupName(remoteJid) : undefined;
     const mimeType = mediaMessage.mimetype ?? "application/octet-stream";
@@ -234,23 +226,21 @@ export class WhatsAppService {
   }
 
   private async handleOwnerCloudUpdateCommand(remoteJid: string, senderPhone: string): Promise<void> {
-    const targetJid = remoteJid || `${senderPhone}@s.whatsapp.net`;
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
     try {
-      await this.socket?.sendMessage(targetJid, {
-        text: "עדכון ענן התקבל. המערכת מתחילה לעדכן ברקע ותיטען מחדש בעוד כדקה."
-      });
+      await this.sendText(targetJid, "עדכון ענן התקבל. המערכת מתחילה לעדכן ברקע ותיטען מחדש בעוד כדקה.");
       const result = await runUpdate();
       logger.warn({ senderPhone, result }, "Owner cloud update command accepted");
       sendSystemAlert("עדכון ענן הופעל", `פקודת עדכון הופעלה מרחוק על ידי ${senderPhone}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error({ err: error, senderPhone }, "Owner cloud update command failed");
-      await this.socket?.sendMessage(targetJid, { text: `עדכון ענן נכשל: ${message}` }).catch(() => {});
+      await this.sendText(targetJid, `עדכון ענן נכשל: ${message}`).catch(() => {});
     }
   }
 
   private async handleOwnerLogExportCommand(remoteJid: string, senderPhone: string): Promise<void> {
-    const targetJid = remoteJid || `${senderPhone}@s.whatsapp.net`;
+    const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
     try {
       if (!this.socket) {
         throw new Error("WhatsApp is not connected");
@@ -267,13 +257,11 @@ export class WhatsAppService {
         .sort((a, b) => b.modifiedAt - a.modifiedAt);
 
       if (files.length === 0) {
-        await this.socket.sendMessage(targetJid, { text: "לא נמצאו קבצי לוג לשליחה." });
+        await this.sendText(targetJid, "לא נמצאו קבצי לוג לשליחה.");
         return;
       }
 
-      await this.socket.sendMessage(targetJid, {
-        text: `פקודת לוגים 223 התקבלה.\nנמצאו ${files.length} קבצי לוג. שולח עכשיו...`
-      });
+      await this.sendText(targetJid, `פקודת לוגים 223 התקבלה.\nנמצאו ${files.length} קבצי לוג. שולח עכשיו...`);
 
       for (const file of files) {
         await this.socket.sendMessage(targetJid, {
@@ -287,7 +275,7 @@ export class WhatsAppService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error({ err: error, senderPhone }, "Owner log export command failed");
-      await this.socket?.sendMessage(targetJid, { text: `שליחת קבצי לוג נכשלה: ${message}` }).catch(() => {});
+      await this.sendText(targetJid, `שליחת קבצי לוג נכשלה: ${message}`).catch(() => {});
     }
   }
 
@@ -318,6 +306,47 @@ export class WhatsAppService {
     for (const listener of this.listeners) {
       listener(next);
     }
+  }
+
+  private senderPhone(message: proto.IWebMessageInfo): string {
+    const key = message.key as proto.IMessageKey & { senderPn?: string; participantPn?: string };
+    const senderJid = key.senderPn ?? key.participantPn ?? message.key.participant ?? message.key.remoteJid ?? "";
+    return normalizePhone(senderJid.split("@")[0] ?? "");
+  }
+
+  private async sendText(remoteJid: string, text: string): Promise<void> {
+    if (!this.socket) {
+      throw new Error("WhatsApp is not connected");
+    }
+
+    await this.socket.sendMessage(await this.resolveOutboundJid(remoteJid), { text });
+  }
+
+  private async sendTextToPhone(phone: string, text: string): Promise<void> {
+    if (!this.socket) {
+      throw new Error("WhatsApp is not connected");
+    }
+
+    await this.socket.sendMessage(await this.resolvePhoneJid(phone), { text });
+  }
+
+  private async resolveOutboundJid(remoteJid: string): Promise<string> {
+    const phoneMatch = remoteJid.match(/^(\d+)@s\.whatsapp\.net$/);
+    if (!phoneMatch) {
+      return remoteJid;
+    }
+
+    return this.resolvePhoneJid(phoneMatch[1]);
+  }
+
+  private async resolvePhoneJid(phone: string): Promise<string> {
+    const normalized = normalizePhone(phone);
+    if (!this.socket || !normalized) {
+      return `${normalized}@s.whatsapp.net`;
+    }
+
+    const result = (await this.socket.onWhatsApp(normalized).catch(() => [])) ?? [];
+    return result.find((item) => item.exists)?.jid ?? `${normalized}@s.whatsapp.net`;
   }
 }
 
