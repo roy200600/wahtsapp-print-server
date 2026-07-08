@@ -322,7 +322,14 @@ export class PrintOrderManager {
     }, expiryMs);
 
     this.fieryJobs.set(code, pending);
-    await this.safeSend(`${managerPhone}@s.whatsapp.net`, renderFieryManagerPrompt(pending));
+    const managerJid = `${managerPhone}@s.whatsapp.net`;
+    logger.info({ code, managerPhone, destinations: destinations.length }, "Sending Fiery destination approval prompt");
+    const promptSent = await this.safeSend(managerJid, renderFieryManagerPrompt(pending));
+    if (!promptSent) {
+      this.finishFieryJob(code);
+      this.failFieryOrder(order, attachments, "Fiery destination approval message could not be sent to the manager.");
+      await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
+    }
   }
 
   private async receiveFieryManagerText(phone: string, remoteJid: string, text: string): Promise<boolean> {
@@ -489,9 +496,10 @@ export class PrintOrderManager {
     return order.attachments.filter((attachment) => !attachment.pdfPasswordRequired || Boolean(attachment.pdfPassword));
   }
 
-  private async safeSend(remoteJid: string, text: string): Promise<void> {
+  private async safeSend(remoteJid: string, text: string): Promise<boolean> {
     try {
       await this.sendMessage(remoteJid, text);
+      return true;
     } catch (error) {
       if (isWhatsAppDisconnectedError(error)) {
         const now = Date.now();
@@ -500,10 +508,11 @@ export class PrintOrderManager {
           this.sendFailureWarnings.set(remoteJid, now);
           logger.warn({ remoteJid }, "Customer message skipped because WhatsApp is disconnected");
         }
-        return;
+        return false;
       }
 
       logger.error({ err: error, remoteJid }, "Failed to send customer print order message");
+      return false;
     }
   }
 }
