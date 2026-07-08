@@ -23,7 +23,11 @@ export interface FieryCopyResult {
 export function getPrimaryFieryProfile(config: AppConfig): PrinterProfileConfig | undefined {
   const profiles = Array.isArray(config.printerProfiles) ? config.printerProfiles : [];
   const primary = profiles.find((profile) => profile.isPrimary) || profiles[0];
-  return primary?.printerType === "fiery" ? primary : undefined;
+  if (primary?.printerType === "fiery") {
+    return primary;
+  }
+
+  return profiles.find((profile) => profile.printerType === "fiery" && getActiveFieryDestinations(profile).length > 0);
 }
 
 export function getActiveFieryDestinations(profile: PrinterProfileConfig): FieryHotFolderDestination[] {

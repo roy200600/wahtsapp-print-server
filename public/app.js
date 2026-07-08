@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.62";
+const APP_VERSION = "1.0.63";
 
 const state = {
   authenticated: false,
@@ -1242,6 +1242,18 @@ function bindSettings() {
   });
 
   $("#checkPrinterBtn")?.addEventListener("click", async () => {
+    readSettingsForm();
+    const primaryProfile = (state.config.printerProfiles || []).find((profile) => profile.isPrimary) || state.config.printerProfiles?.[0];
+    if (primaryProfile?.printerType === "fiery") {
+      const activeDestinations = (primaryProfile.fieryDestinations || []).filter((destination) => destination.enabled !== false && (destination.folderPath || destination.shortcutPath));
+      notify(
+        activeDestinations.length > 0 ? "success" : "warning",
+        activeDestinations.length > 0
+          ? `Fiery פעיל עם ${activeDestinations.length} יעדי Hot Folder.`
+          : "במצב Fiery צריך להגדיר לפחות יעד Hot Folder אחד פעיל."
+      );
+      return;
+    }
     const result = await api("/api/printers/check", postJson({ printerName: state.config.printerName }));
     notify(result.ok ? "success" : "warning", result.message || "בדיקת תאימות הסתיימה.");
   });
@@ -1282,8 +1294,8 @@ function readSettingsForm() {
   if (form.elements.printerProfileCount) {
     config.printerProfiles = readPrinterProfiles(form);
     const primaryProfile = config.printerProfiles.find((profile) => profile.isPrimary) || config.printerProfiles[0];
-    if (primaryProfile?.printerName) {
-      config.printerName = primaryProfile.printerName;
+    if (primaryProfile) {
+      config.printerName = primaryProfile.printerType === "fiery" ? "" : primaryProfile.printerName || "";
       config.pdfPrintProfile = primaryProfile.printProfile;
       config.officePrintProfile = primaryProfile.officeProfile;
     }
@@ -1292,11 +1304,11 @@ function readSettingsForm() {
   config.printerRoles = {
     defaultPrinter: config.printerName,
     blackWhitePrinter:
-      config.printerProfiles?.find((profile) => profile.role === "blackWhite")?.printerName ??
+      config.printerProfiles?.find((profile) => profile.role === "blackWhite" && profile.printerType !== "fiery")?.printerName ??
       config.printerRoles?.blackWhitePrinter ??
       "",
     colorPrinter:
-      config.printerProfiles?.find((profile) => profile.role === "color")?.printerName ??
+      config.printerProfiles?.find((profile) => profile.role === "color" && profile.printerType !== "fiery")?.printerName ??
       config.printerRoles?.colorPrinter ??
       "",
     askColorPreference: form.elements.roleAskColorPreference ? checked("roleAskColorPreference") : Boolean(config.printerRoles?.askColorPreference)
