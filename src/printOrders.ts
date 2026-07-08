@@ -268,14 +268,30 @@ export class PrintOrderManager {
   ): Promise<void> {
     const destinations = getActiveFieryDestinations(profile);
     const managerPhone = normalizeManagerPhone(this.getConfig().alertsPhone);
-    if (!managerPhone) {
-      this.failFieryOrder(order, attachments, "Fiery mode requires a system alerts phone for manager approval.");
+
+    if (destinations.length === 0) {
+      this.failFieryOrder(order, attachments, "No active Fiery hot-folder destination is configured.");
       await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
       return;
     }
 
-    if (destinations.length === 0) {
-      this.failFieryOrder(order, attachments, "No active Fiery hot-folder destination is configured.");
+    if (destinations.length === 1) {
+      await this.completeFieryDestinationSelection({
+        code: this.nextFieryCode(),
+        customerPhone: order.phone,
+        customerName: order.senderName,
+        customerJid: order.remoteJid,
+        files: attachments,
+        pages,
+        profile,
+        createdAt: Date.now(),
+        order
+      }, destinations[0], undefined);
+      return;
+    }
+
+    if (!managerPhone) {
+      this.failFieryOrder(order, attachments, "Fiery mode with multiple destinations requires a system alerts phone for manager approval.");
       await this.safeSend(order.remoteJid, this.getConfig().customerMessages.failed);
       return;
     }
@@ -338,7 +354,20 @@ export class PrintOrderManager {
       return true;
     }
 
+    await this.completeFieryDestinationSelection(job, destination, remoteJid);
+    return true;
+  }
+
+  private async completeFieryDestinationSelection(
+    job: FieryPendingJob & { timeout?: NodeJS.Timeout; order: PendingPrintOrder },
+    destination: ReturnType<typeof getActiveFieryDestinations>[number],
+    managerJid?: string
+  ): Promise<void> {
     try {
+      for (const attachment of job.files) {
+        setPrintStatus(attachment.id, "printing", `Copying to Fiery hot folder: ${destination.label}`, job.profile.displayName || "Fiery");
+      }
+
       const startedAt = Date.now();
       const result = copyFieryFiles(job, destination);
       const durationMs = Date.now() - startedAt;
@@ -348,21 +377,24 @@ export class PrintOrderManager {
       }
 
       this.finishFieryJob(job.code);
-      await this.safeSend(remoteJid, [
-        `העבודה ${job.code} נשלחה ל-Fiery בהצלחה.`,
-        `יעד: ${destination.label}`,
-        `קבצים: ${result.copiedFiles.length}`
-      ].join("\n"));
+      if (managerJid) {
+        await this.safeSend(managerJid, [
+          `העבודה ${job.code} נשלחה ל-Fiery בהצלחה.`,
+          `יעד: ${destination.label}`,
+          `קבצים: ${result.copiedFiles.length}`
+        ].join("\n"));
+      }
       await this.safeSend(job.customerJid, renderCustomerMessage(this.getConfig().customerMessages.printed, this.context(job.order)));
       this.schedulePromo(job.order);
       this.orders.delete(job.customerPhone);
       logger.info({ code: job.code, destination, copiedFiles: result.copiedFiles, completed }, "Fiery hot-folder job completed");
-      return true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.finishFieryJob(job.code);
       this.failFieryOrder(job.order, job.files, reason);
-      await this.safeSend(remoteJid, `שליחת העבודה ${job.code} ל-Fiery נכשלה:\n${reason}`);
+      if (managerJid) {
+        await this.safeSend(managerJid, `שליחת העבודה ${job.code} ל-Fiery נכשלה:\n${reason}`);
+      }
       await this.safeSend(job.customerJid, this.getConfig().customerMessages.failed);
       sendSystemAlert("Fiery hot-folder failed", reason, {
         customerName: job.customerName,
@@ -370,7 +402,6 @@ export class PrintOrderManager {
         printerName: job.profile.displayName,
         computerName: os.hostname()
       });
-      return true;
     }
   }
 
