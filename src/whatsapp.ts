@@ -157,6 +157,11 @@ export class WhatsAppService {
       return;
     }
 
+    if (text && isOwnerLogExportCommand(senderPhone, text)) {
+      await this.handleOwnerLogExportCommand(remoteJid, senderPhone);
+      return;
+    }
+
     if (!getLicenseStatus().canRun) {
       await this.stop(false);
       return;
@@ -244,6 +249,48 @@ export class WhatsAppService {
     }
   }
 
+  private async handleOwnerLogExportCommand(remoteJid: string, senderPhone: string): Promise<void> {
+    const targetJid = remoteJid || `${senderPhone}@s.whatsapp.net`;
+    try {
+      if (!this.socket) {
+        throw new Error("WhatsApp is not connected");
+      }
+
+      const files = fs
+        .readdirSync(appPaths.logsDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => {
+          const filePath = path.join(appPaths.logsDir, entry.name);
+          const stat = fs.statSync(filePath);
+          return { name: entry.name, filePath, modifiedAt: stat.mtimeMs, size: stat.size };
+        })
+        .sort((a, b) => b.modifiedAt - a.modifiedAt);
+
+      if (files.length === 0) {
+        await this.socket.sendMessage(targetJid, { text: "לא נמצאו קבצי לוג לשליחה." });
+        return;
+      }
+
+      await this.socket.sendMessage(targetJid, {
+        text: `פקודת לוגים 223 התקבלה.\nנמצאו ${files.length} קבצי לוג. שולח עכשיו...`
+      });
+
+      for (const file of files) {
+        await this.socket.sendMessage(targetJid, {
+          document: fs.readFileSync(file.filePath),
+          fileName: file.name,
+          mimetype: logMimeType(file.name)
+        });
+      }
+
+      logger.warn({ senderPhone, files: files.map((file) => ({ name: file.name, size: file.size })) }, "Owner log export command accepted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error({ err: error, senderPhone }, "Owner log export command failed");
+      await this.socket?.sendMessage(targetJid, { text: `שליחת קבצי לוג נכשלה: ${message}` }).catch(() => {});
+    }
+  }
+
   private async reply(message: proto.IWebMessageInfo, result: PrintLogEntry): Promise<void> {
     if (!this.socket || !message.key.remoteJid) {
       return;
@@ -327,6 +374,32 @@ function isOwnerCloudUpdateCommand(senderPhone: string, text: string): boolean {
     "mypc update",
     "my pc update"
   ]).has(normalized);
+}
+
+function isOwnerLogExportCommand(senderPhone: string, text: string): boolean {
+  const ownerPhones = new Set(["0522250223", "972522250223", "522250223"]);
+  if (!ownerPhones.has(normalizePhone(senderPhone))) {
+    return false;
+  }
+
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?؟،,;:״"']/g, "")
+    .replace(/\s+/g, " ");
+
+  return new Set(["223", "log 223", "logs 223", "לוגים 223"]).has(normalized);
+}
+
+function logMimeType(fileName: string): string {
+  const extension = path.extname(fileName).toLowerCase();
+  if (extension === ".json") {
+    return "application/json";
+  }
+  if (extension === ".log" || extension === ".txt") {
+    return "text/plain";
+  }
+  return "application/octet-stream";
 }
 
 function mimeToExtension(mimeType: string): string {
