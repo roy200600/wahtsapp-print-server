@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appPaths } from "./paths.js";
 import { logger } from "./logger.js";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,7 +50,7 @@ export async function captureScreen(): Promise<string> {
     "$bitmap.Dispose()"
   ].join("; ");
 
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -74,7 +75,7 @@ async function stopTeamViewerProcesses(): Promise<void> {
   ].join("; ");
 
   try {
-    await execFileAsync("powershell.exe", [
+    await execFileAsync(getPowerShellPath(), [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
@@ -92,7 +93,7 @@ async function launchTeamViewerQuickSupport(teamViewerPath: string): Promise<voi
     "Start-Process -FilePath $path -WorkingDirectory (Split-Path -Parent $path)"
   ].join("; ");
 
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -124,7 +125,7 @@ async function ensureTeamViewerQuickSupport(): Promise<string | undefined> {
   ].join("; ");
 
   try {
-    await execFileAsync("powershell.exe", [
+    await execFileAsync(getPowerShellPath(), [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
