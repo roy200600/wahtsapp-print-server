@@ -7,7 +7,8 @@ import { appPaths, rootDir } from "./paths.js";
 import { APP_VERSION } from "./version.js";
 
 const execFileAsync = promisify(execFile);
-const startupShortcutName = "WhatsApp Print Server.lnk";
+const startupShortcutName = "MY-PC WhatsApp Print Server.lnk";
+const legacyStartupShortcutNames = ["WhatsApp Print Server.lnk"];
 const registryRunName = "WhatsAppPrintServer";
 const repoApiLatestCommitUrl = "https://api.github.com/repos/roy200600/wahtsapp-print-server/commits/main";
 const repoRawPackageUrl = "https://raw.githubusercontent.com/roy200600/wahtsapp-print-server/main/package.json";
@@ -55,7 +56,7 @@ export function cleanupPrintedFilesOlderThan(days: number): { deleted: number; e
 
 export function getStartupStatus(): { enabled: boolean; shortcutPath: string } {
   const shortcutPath = getStartupShortcutPath();
-  return { enabled: fs.existsSync(shortcutPath) || hasRegistryRunEntry(), shortcutPath };
+  return { enabled: getStartupShortcutPaths().some((candidate) => fs.existsSync(candidate)) || hasRegistryRunEntry(), shortcutPath };
 }
 
 export async function enableStartup(): Promise<{ enabled: boolean; shortcutPath: string }> {
@@ -83,11 +84,17 @@ export async function enableStartup(): Promise<{ enabled: boolean; shortcutPath:
     ].join("; ")
   ]);
 
+  for (const legacyPath of getLegacyStartupShortcutPaths()) {
+    fs.rmSync(legacyPath, { force: true });
+  }
+
   return getStartupStatus();
 }
 
 export function disableStartup(): { enabled: boolean; shortcutPath: string } {
-  fs.rmSync(getStartupShortcutPath(), { force: true });
+  for (const shortcutPath of getStartupShortcutPaths()) {
+    fs.rmSync(shortcutPath, { force: true });
+  }
   removeRegistryRunEntry();
   return getStartupStatus();
 }
@@ -240,6 +247,18 @@ export function getCurrentVersion(): string {
 }
 
 function getStartupShortcutPath(): string {
+  return path.join(getStartupDir(), startupShortcutName);
+}
+
+function getStartupShortcutPaths(): string[] {
+  return [getStartupShortcutPath(), ...getLegacyStartupShortcutPaths()];
+}
+
+function getLegacyStartupShortcutPaths(): string[] {
+  return legacyStartupShortcutNames.map((name) => path.join(getStartupDir(), name));
+}
+
+function getStartupDir(): string {
   return path.join(
     os.homedir(),
     "AppData",
@@ -248,8 +267,7 @@ function getStartupShortcutPath(): string {
     "Windows",
     "Start Menu",
     "Programs",
-    "Startup",
-    startupShortcutName
+    "Startup"
   );
 }
 

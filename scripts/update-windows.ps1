@@ -236,6 +236,68 @@ function Initialize-TeamViewerQuickSupport($ProjectRoot) {
   Write-Warning "TeamViewer QS download failed. Remote support command will report that QS is missing. Last error: $LastError"
 }
 
+function New-AppShortcut($ProjectRoot, $ShortcutPath) {
+  $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
+  $Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`" -Hidden -OpenBrowser"
+  $ShortcutDir = Split-Path -Parent $ShortcutPath
+
+  if (-not [string]::IsNullOrWhiteSpace($ShortcutDir)) {
+    New-Item -ItemType Directory -Force -Path $ShortcutDir | Out-Null
+  }
+
+  $Shell = New-Object -ComObject WScript.Shell
+  $Shortcut = $Shell.CreateShortcut($ShortcutPath)
+  $Shortcut.TargetPath = $PowerShellPath
+  $Shortcut.Arguments = $Arguments
+  $Shortcut.WorkingDirectory = [string]$ProjectRoot
+  $Shortcut.WindowStyle = 7
+  $Shortcut.Save()
+}
+
+function Get-DesktopFolders {
+  $Candidates = @(
+    [Environment]::GetFolderPath("DesktopDirectory"),
+    [Environment]::GetFolderPath("Desktop"),
+    (Join-Path $env:USERPROFILE "Desktop"),
+    (Join-Path $env:PUBLIC "Desktop")
+  )
+
+  $Candidates |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
+}
+
+function Repair-DesktopShortcut($ProjectRoot) {
+  foreach ($DesktopDir in Get-DesktopFolders) {
+    try {
+      New-AppShortcut $ProjectRoot (Join-Path $DesktopDir "MY-PC WhatsApp Print Server.lnk")
+      Write-Host "Desktop shortcut repaired in: $DesktopDir"
+      return
+    } catch {
+      Write-Warning "Could not repair desktop shortcut in $DesktopDir`: $($_.Exception.Message)"
+    }
+  }
+}
+
+function Get-StartupShortcutPaths {
+  $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+  @(
+    (Join-Path $StartupDir "MY-PC WhatsApp Print Server.lnk"),
+    (Join-Path $StartupDir "WhatsApp Print Server.lnk")
+  )
+}
+
+function Repair-StartupShortcut($ProjectRoot) {
+  $paths = @(Get-StartupShortcutPaths)
+  foreach ($shortcutPath in $paths) {
+    Remove-Item -LiteralPath $shortcutPath -Force -ErrorAction SilentlyContinue
+  }
+
+  New-AppShortcut $ProjectRoot $paths[0]
+  Write-Host "Startup shortcut repaired: $($paths[0])"
+}
+
 function Get-ConfiguredPort {
   $settingsPath = Join-Path $ProjectRoot "config\settings.json"
   if (Test-Path $settingsPath) {
@@ -251,42 +313,57 @@ function Get-ConfiguredPort {
 }
 
 function Stop-PortOwnerProcesses($Port, $Reason) {
+  $processIds = @()
   try {
-    $processIds = @()
     $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
     $processIds += @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
-    if ($processIds.Count -eq 0) {
+  } catch {
+    Write-Warning "Get-NetTCPConnection failed while stopping port $Port`: $($_.Exception.Message)"
+  }
+
+  if ($processIds.Count -eq 0) {
+    try {
       $netstatLines = @(& netstat.exe -ano -p tcp | Select-String -Pattern ":$Port\s+.*LISTENING\s+(\d+)")
       foreach ($line in $netstatLines) {
         if ($line.Matches.Count -gt 0) {
           $processIds += [int]$line.Matches[0].Groups[1].Value
         }
       }
+    } catch {
+      Write-Warning "netstat fallback failed while stopping port $Port`: $($_.Exception.Message)"
     }
-    $processIds = @($processIds | Select-Object -Unique)
-    foreach ($processId in $processIds) {
-      Write-Host "Stopping server process on port ${Port}: PID $processId ($Reason)"
-      try {
-        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-      } catch {}
+  }
+
+  $processIds = @($processIds | Select-Object -Unique)
+  foreach ($processId in $processIds) {
+    Write-Host "Stopping server process on port ${Port}: PID $processId ($Reason)"
+    try {
+      Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+    } catch {
+      Write-Warning "Could not stop PID $processId`: $($_.Exception.Message)"
     }
-    if ($processIds.Count -gt 0) {
-      Start-Sleep -Seconds 2
-    }
-  } catch {}
+  }
+
+  if ($processIds.Count -gt 0) {
+    Start-Sleep -Seconds 2
+  }
 }
 
 Initialize-UnicodeConsole
 
 Write-Host "Stopping running server..."
-Get-CimInstance Win32_Process |
-  Where-Object {
-    $_.Name -eq "node.exe" -and
-    ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
-  } |
-  ForEach-Object {
-    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
-  }
+try {
+  Get-CimInstance Win32_Process |
+    Where-Object {
+      $_.Name -eq "node.exe" -and
+      ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
+    } |
+    ForEach-Object {
+      try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+    }
+} catch {
+  Write-Warning "Could not enumerate node processes through WMI. Falling back to port stop only: $($_.Exception.Message)"
+}
 Stop-PortOwnerProcesses (Get-ConfiguredPort) "update"
 
 if (Test-Path $ExtractRoot) {
@@ -330,6 +407,8 @@ Enable-PortableNodePath $ProjectRoot $NodeExe
 Initialize-SumatraPdf $ProjectRoot
 Initialize-Ghostscript $ProjectRoot
 Initialize-TeamViewerQuickSupport $ProjectRoot
+Repair-DesktopShortcut $ProjectRoot
+Repair-StartupShortcut $ProjectRoot
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {
@@ -344,17 +423,19 @@ Invoke-Checked $NpmCmd @("run", "build")
 if (-not $NoStart) {
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
-  $QuotedStartScript = '"' + $StartScript + '"'
-  Start-Process -FilePath $PowerShellPath -ArgumentList @(
+  & $PowerShellPath @(
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
     "-WindowStyle",
     "Hidden",
     "-File",
-    $QuotedStartScript,
+    $StartScript,
     "-Hidden"
-  ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+  )
+  if ($LASTEXITCODE -ne 0) {
+    throw "Server restart failed with exit code $LASTEXITCODE"
+  }
 }
 
 Write-Host "Update complete."

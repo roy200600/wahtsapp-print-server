@@ -271,6 +271,57 @@ function Initialize-TeamViewerQuickSupport($ProjectRoot) {
   Write-Warning "TeamViewer QS download failed. Remote support command will report that QS is missing. Last error: $LastError"
 }
 
+function Get-ConfiguredPort($ProjectRoot) {
+  $settingsPath = Join-Path $ProjectRoot "config\settings.json"
+  if (Test-Path $settingsPath) {
+    try {
+      $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+      if ($settings.port) {
+        return [int]$settings.port
+      }
+    } catch {}
+  }
+
+  return 3010
+}
+
+function Stop-PortOwnerProcesses($Port, $Reason) {
+  $processIds = @()
+  try {
+    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    $processIds += @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
+  } catch {
+    Write-Warning "Get-NetTCPConnection failed while stopping port $Port`: $($_.Exception.Message)"
+  }
+
+  if ($processIds.Count -eq 0) {
+    try {
+      $netstatLines = @(& netstat.exe -ano -p tcp | Select-String -Pattern ":$Port\s+.*LISTENING\s+(\d+)")
+      foreach ($line in $netstatLines) {
+        if ($line.Matches.Count -gt 0) {
+          $processIds += [int]$line.Matches[0].Groups[1].Value
+        }
+      }
+    } catch {
+      Write-Warning "netstat fallback failed while stopping port $Port`: $($_.Exception.Message)"
+    }
+  }
+
+  $processIds = @($processIds | Select-Object -Unique)
+  foreach ($processId in $processIds) {
+    Write-Host "Stopping server process on port ${Port}: PID $processId ($Reason)"
+    try {
+      Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+    } catch {
+      Write-Warning "Could not stop PID $processId`: $($_.Exception.Message)"
+    }
+  }
+
+  if ($processIds.Count -gt 0) {
+    Start-Sleep -Seconds 2
+  }
+}
+
 function New-AppShortcut($ProjectRoot, $ShortcutPath) {
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
@@ -362,14 +413,19 @@ if ($UseCurrentFolder) {
 Set-Location -LiteralPath $ProjectRoot
 
 Write-Host "Stopping existing server if it is running..."
-Get-CimInstance Win32_Process |
-  Where-Object {
-    $_.Name -eq "node.exe" -and
-    ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
-  } |
-  ForEach-Object {
-    try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
-  }
+try {
+  Get-CimInstance Win32_Process |
+    Where-Object {
+      $_.Name -eq "node.exe" -and
+      ($_.CommandLine -like "*dist/main.js*" -or $_.CommandLine -like "*WhatsAppPrintServer*")
+    } |
+    ForEach-Object {
+      try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+    }
+} catch {
+  Write-Warning "Could not enumerate node processes through WMI. Installation will continue: $($_.Exception.Message)"
+}
+Stop-PortOwnerProcesses (Get-ConfiguredPort $ProjectRoot) "install"
 
 Initialize-NodeRuntime $ProjectRoot
 Enable-PortableNodePath $ProjectRoot $script:NodeExe
@@ -398,38 +454,47 @@ Invoke-Checked $script:NpmCmd @("run", "build")
 
 New-DesktopShortcut $ProjectRoot
 
-if ($EnableStartup -and -not $NoStartup) {
+if (-not $NoStartup) {
   $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
   New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
   $ShortcutPath = Join-Path $StartupDir "MY-PC WhatsApp Print Server.lnk"
+  $LegacyShortcutPath = Join-Path $StartupDir "WhatsApp Print Server.lnk"
   try {
+    Remove-Item -LiteralPath $LegacyShortcutPath -Force -ErrorAction SilentlyContinue
     New-AppShortcut $ProjectRoot $ShortcutPath
     Write-Host "Startup shortcut created: $ShortcutPath"
   } catch {
     Write-Warning "Startup shortcut was not created. Installation will continue. Error: $($_.Exception.Message)"
   }
 } else {
-  $StartupShortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\MY-PC WhatsApp Print Server.lnk"
-  if (Test-Path $StartupShortcutPath) {
-    Remove-Item -LiteralPath $StartupShortcutPath -Force
-    Write-Host "Startup shortcut removed for trial/default installation."
+  $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+  foreach ($StartupShortcutPath in @(
+    (Join-Path $StartupDir "MY-PC WhatsApp Print Server.lnk"),
+    (Join-Path $StartupDir "WhatsApp Print Server.lnk")
+  )) {
+    if (Test-Path $StartupShortcutPath) {
+      Remove-Item -LiteralPath $StartupShortcutPath -Force
+      Write-Host "Startup shortcut removed: $StartupShortcutPath"
+    }
   }
 }
 
 if (-not $NoStart) {
   $StartScript = Join-Path $ProjectRoot "scripts\start-windows.ps1"
-  $QuotedStartScript = '"' + $StartScript + '"'
   $PowerShellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-  Start-Process -FilePath $PowerShellPath -ArgumentList @(
+  & $PowerShellPath @(
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
     "-WindowStyle",
     "Hidden",
     "-File",
-    $QuotedStartScript,
+    $StartScript,
     "-Hidden"
-  ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+  )
+  if ($LASTEXITCODE -ne 0) {
+    throw "Server start failed with exit code $LASTEXITCODE"
+  }
 }
 
 Write-Host ""

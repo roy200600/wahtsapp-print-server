@@ -13,8 +13,16 @@ export interface RemoteSupportResult {
   screenshotPath: string;
 }
 
+export function getRemoteSupportStatus(): { teamViewerExists: boolean; teamViewerPath: string } {
+  const teamViewerPath = findTeamViewerQuickSupport() ?? path.join(appPaths.toolsDir, "TeamViewerQS", "TeamViewerQS.exe");
+  return {
+    teamViewerExists: fs.existsSync(teamViewerPath),
+    teamViewerPath
+  };
+}
+
 export async function startRemoteSupportSession(): Promise<RemoteSupportResult> {
-  const teamViewerPath = findTeamViewerQuickSupport();
+  const teamViewerPath = await ensureTeamViewerQuickSupport();
   if (!teamViewerPath) {
     throw new Error("TeamViewer QS was not found under tools\\TeamViewerQS. Run the installer/update first.");
   }
@@ -90,9 +98,45 @@ async function launchTeamViewerQuickSupport(teamViewerPath: string): Promise<voi
     "Bypass",
     "-Command",
     script
-  ], { windowsHide: false, timeout: 30000, maxBuffer: 1024 * 1024 });
+  ], { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
 
   await new Promise((resolve) => setTimeout(resolve, 6000));
+}
+
+async function ensureTeamViewerQuickSupport(): Promise<string | undefined> {
+  const existing = findTeamViewerQuickSupport();
+  if (existing) {
+    return existing;
+  }
+
+  const targetDir = path.join(appPaths.toolsDir, "TeamViewerQS");
+  const targetPath = path.join(targetDir, "TeamViewerQS.exe");
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const script = [
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
+    `$target = ${JSON.stringify(targetPath)}`,
+    `$dir = ${JSON.stringify(targetDir)}`,
+    "New-Item -ItemType Directory -Force -Path $dir | Out-Null",
+    "Invoke-WebRequest -Uri 'https://download.teamviewer.com/download/TeamViewerQS.exe' -OutFile $target",
+    "if (-not (Test-Path -LiteralPath $target)) { throw 'TeamViewerQS.exe was not downloaded.' }",
+    "if ((Get-Item -LiteralPath $target).Length -lt 1MB) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; throw 'Downloaded TeamViewerQS.exe is too small.' }"
+  ].join("; ");
+
+  try {
+    await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      script
+    ], { windowsHide: true, timeout: 120000, maxBuffer: 1024 * 1024 });
+  } catch (error) {
+    logger.error({ err: error, targetPath }, "TeamViewer QS download failed");
+    return undefined;
+  }
+
+  return findTeamViewerQuickSupport();
 }
 
 function findTeamViewerQuickSupport(): string | undefined {

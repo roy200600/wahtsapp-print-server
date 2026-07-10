@@ -29,7 +29,7 @@ server.on("error", (error) => {
   if (listenError.code === "EADDRINUSE") {
     logger.warn({ port: runtimeConfig.port }, "Admin server is already running or the port is in use");
     console.log(`WhatsApp Print Server is already running or port ${runtimeConfig.port} is in use.`);
-    process.exit(0);
+    process.exit(1);
   }
 
   throw error;

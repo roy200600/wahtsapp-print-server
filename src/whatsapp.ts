@@ -20,9 +20,9 @@ import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
 import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
-import { checkForUpdates, runUpdate } from "./maintenance.js";
+import { checkForUpdates, getUpdateStatus, runUpdate } from "./maintenance.js";
 import { APP_VERSION } from "./version.js";
-import { captureScreen, formatRemoteSupportCaption, startRemoteSupportSession } from "./remoteSupport.js";
+import { captureScreen, formatRemoteSupportCaption, getRemoteSupportStatus, startRemoteSupportSession } from "./remoteSupport.js";
 
 type StatusListener = (state: WhatsAppRuntimeState) => void;
 
@@ -298,12 +298,17 @@ export class WhatsAppService {
     const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
     try {
       const license = getLicenseStatus();
+      const updateStatus = getUpdateStatus();
+      const remoteSupport = getRemoteSupportStatus();
       await this.sendText(targetJid, [
         "🖥 סטטוס שרת",
         "",
         `גרסה: ${APP_VERSION}`,
         `WhatsApp: ${this.state.connected ? "מחובר" : "מנותק"}`,
         `שגיאה אחרונה: ${this.state.lastError || "אין"}`,
+        `עדכון אחרון: ${updateStatus.status} - ${updateStatus.message}`,
+        `TeamViewer QS: ${remoteSupport.teamViewerExists ? "קיים" : "חסר"}`,
+        `נתיב QS: ${remoteSupport.teamViewerPath}`,
         `רישוי: ${license.mode}`,
         `אפשר להפעיל: ${license.canRun ? "כן" : "לא"}`,
         `תוקף: ${license.expiresAt || "ללא"}`,

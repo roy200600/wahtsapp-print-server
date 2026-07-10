@@ -124,6 +124,19 @@ function Get-RunningServerStatus($Port) {
   }
 }
 
+function Wait-RunningServerStatus($Port, $TimeoutSeconds) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  do {
+    $status = Get-RunningServerStatus $Port
+    if ($status) {
+      return $status
+    }
+    Start-Sleep -Seconds 1
+  } while ((Get-Date) -lt $deadline)
+
+  return $null
+}
+
 function Test-RunningServerDiagnostics($Port) {
   try {
     Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/diagnostics/print-engines" -TimeoutSec 2 | Out-Null
@@ -148,17 +161,22 @@ function Get-LocalPackageVersion {
 }
 
 function Get-PortOwnerProcesses($Port) {
-  try {
-    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
-    $processIds = @($connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ })
-    if ($processIds.Count -eq 0) {
-      return @()
-    }
+  $processIds = @(Get-PortOwnerProcessIds $Port)
+  if ($processIds.Count -eq 0) {
+    return @()
+  }
 
+  try {
     return @(Get-CimInstance Win32_Process |
       Where-Object { $processIds -contains $_.ProcessId })
   } catch {
-    return @()
+    return @($processIds | ForEach-Object {
+      [pscustomobject]@{
+        Name = "unknown"
+        ProcessId = $_
+        CommandLine = ""
+      }
+    })
   }
 }
 
@@ -194,6 +212,11 @@ function Stop-PortOwnerProcesses($Port, $Reason) {
 
   if ($processIds.Count -gt 0) {
     Start-Sleep -Seconds 2
+  }
+
+  $remaining = @(Get-PortOwnerProcessIds $Port)
+  if ($remaining.Count -gt 0) {
+    throw "Port $Port is still in use after stop attempt. Remaining PID(s): $($remaining -join ', ')"
   }
 }
 
@@ -401,14 +424,21 @@ if ($Hidden) {
   $ServerLog = Join-Path $ProjectRoot "logs\server-start.log"
   $ServerErrorLog = Join-Path $ProjectRoot "logs\server-start-error.log"
   Start-Process -FilePath $NodeExe -ArgumentList @("dist/main.js") -WorkingDirectory $ProjectRoot -WindowStyle Hidden -RedirectStandardOutput $ServerLog -RedirectStandardError $ServerErrorLog
-  Start-Sleep -Seconds 5
-  $StartedStatus = Get-RunningServerStatus $ConfiguredPort
+  $StartedStatus = Wait-RunningServerStatus $ConfiguredPort 30
   if (-not $StartedStatus) {
     $errorTail = ""
     if (Test-Path -LiteralPath $ServerErrorLog) {
       $errorTail = (Get-Content -LiteralPath $ServerErrorLog -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
     }
     throw "MY-PC WhatsApp Print Server did not start on port $ConfiguredPort. See $ServerLog and $ServerErrorLog. $errorTail"
+  }
+  $LocalVersion = Get-LocalPackageVersion
+  $StartedVersion = [string]$StartedStatus.version
+  if ($LocalVersion -and $StartedVersion -ne $LocalVersion) {
+    throw "MY-PC WhatsApp Print Server started with version '$StartedVersion' but expected '$LocalVersion'. An old server process may still be running."
+  }
+  if (-not (Test-RunningServerDiagnostics $ConfiguredPort)) {
+    throw "MY-PC WhatsApp Print Server started but diagnostics endpoint is not available. The active server is likely outdated."
   }
   if ($OpenBrowser) {
     Start-Sleep -Seconds 3
