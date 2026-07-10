@@ -89,6 +89,7 @@ async function printPdfWithSumatra(attachment: IncomingAttachment, config: AppCo
 }
 
 async function printImageWithDriver(filePath: string, config: AppConfig): Promise<void> {
+  const profile = config.pdfPrintProfile;
   await execFileAsync(getPowerShellPath(), [
     "-NoProfile",
     "-ExecutionPolicy",
@@ -99,6 +100,12 @@ async function printImageWithDriver(filePath: string, config: AppConfig): Promis
     filePath,
     "-PrinterName",
     config.printerName,
+    "-Orientation",
+    profile.orientation,
+    "-PaperSize",
+    profile.paperSize,
+    "-ScalePercent",
+    String(profile.scalePercent),
     "-Copies",
     String(config.copies)
   ]);
