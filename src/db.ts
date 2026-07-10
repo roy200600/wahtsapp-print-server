@@ -40,6 +40,19 @@ export function hasMessage(messageKey: string): boolean {
   return readJobs().some((job) => job.message_key === messageKey);
 }
 
+export function hasSenderMessage(senderPhone: string, messageId: string): boolean {
+  const normalizedSender = String(senderPhone || "").replace(/[^\d]/g, "");
+  const normalizedMessageId = String(messageId || "").trim();
+  if (!normalizedSender || !normalizedMessageId) {
+    return false;
+  }
+
+  return readJobs().some((job) => {
+    const jobSender = String(job.sender_phone || "").replace(/[^\d]/g, "");
+    return jobSender === normalizedSender && job.message_key.endsWith(`:${normalizedMessageId}`);
+  });
+}
+
 export function savePrintLog(entry: PrintLogEntry): void {
   const jobs = readJobs();
   const job: StoredPrintJob = {

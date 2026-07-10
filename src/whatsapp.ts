@@ -15,11 +15,11 @@ import { Boom } from "@hapi/boom";
 import { appPaths } from "./paths.js";
 import { normalizePhone } from "./config.js";
 import type { AppConfig, IncomingAttachment, PrintLogEntry } from "./types.js";
-import { processAttachment } from "./jobProcessor.js";
 import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
 import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
+import { hasSenderMessage } from "./db.js";
 import { checkForUpdates, getUpdateStatus, markUpdateNotificationSent, runUpdate } from "./maintenance.js";
 import { APP_VERSION } from "./version.js";
 import { captureScreen, formatRemoteSupportCaption, getRemoteSupportStatus, startRemoteSupportSession } from "./remoteSupport.js";
@@ -39,6 +39,7 @@ export class WhatsAppService {
   private intentionalStop = false;
   private reconnectTimer?: NodeJS.Timeout;
   private updateCompletionTimer?: NodeJS.Timeout;
+  private readonly inFlightMessageKeys = new Set<string>();
   private readonly printOrders: PrintOrderManager;
 
   constructor(private readonly getConfig: () => AppConfig) {
@@ -209,19 +210,34 @@ export class WhatsAppService {
       return;
     }
 
+    const messageId = message.key.id ?? "";
+    const dedupeKey = this.senderMessageKey(senderPhone, messageId);
+    if (dedupeKey && (this.inFlightMessageKeys.has(dedupeKey) || hasSenderMessage(senderPhone, messageId))) {
+      logger.warn({ senderPhone, remoteJid, messageId }, "Duplicate WhatsApp media message skipped before download");
+      return;
+    }
+
     try {
+      if (dedupeKey) {
+        this.inFlightMessageKeys.add(dedupeKey);
+      }
       const buffer = await downloadMediaMessage(message, "buffer", {});
-      const attachment = await this.buildAttachment(message, mediaMessage, Buffer.from(buffer));
+      const attachment = await this.buildAttachment(message, mediaMessage, Buffer.from(buffer), messageId);
       await this.printOrders.receiveAttachment(attachment);
     } catch (error) {
       logger.error({ err: error, messageKey: message.key.id }, "Failed to handle WhatsApp message");
+    } finally {
+      if (dedupeKey) {
+        this.inFlightMessageKeys.delete(dedupeKey);
+      }
     }
   }
 
   private async buildAttachment(
     message: proto.IWebMessageInfo,
     mediaMessage: proto.Message.IDocumentMessage | proto.Message.IImageMessage,
-    buffer: Buffer
+    buffer: Buffer,
+    messageId: string
   ): Promise<IncomingAttachment> {
     const remoteJid = message.key.remoteJid ?? "";
     const senderPhone = this.senderPhone(message);
@@ -250,7 +266,7 @@ export class WhatsAppService {
       sizeBytes: buffer.length,
       filePath,
       messageText: safeContentText(message.message),
-      messageKey: `${remoteJid}:${message.key.id ?? id}`
+      messageKey: this.senderMessageKey(senderPhone, messageId) || `${remoteJid}:${messageId || id}`
     };
   }
 
@@ -503,6 +519,16 @@ export class WhatsAppService {
     const key = message.key as proto.IMessageKey & { senderPn?: string; participantPn?: string };
     const senderJid = key.senderPn ?? key.participantPn ?? message.key.participant ?? message.key.remoteJid ?? "";
     return normalizePhone(senderJid.split("@")[0] ?? "");
+  }
+
+  private senderMessageKey(senderPhone: string, messageId: string): string {
+    const normalizedSender = normalizePhone(senderPhone);
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedSender || !normalizedMessageId) {
+      return "";
+    }
+
+    return `${normalizedSender}:${normalizedMessageId}`;
   }
 
   private async sendText(remoteJid: string, text: string): Promise<void> {

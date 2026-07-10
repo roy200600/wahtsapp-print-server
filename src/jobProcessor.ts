@@ -5,7 +5,7 @@ import type { AppConfig, IncomingAttachment, PrintLogEntry } from "./types.js";
 import { validateAttachment } from "./security.js";
 import { printFile } from "./printer.js";
 import { appPaths } from "./paths.js";
-import { hasMessage, savePrintLog, setPrintStatus } from "./db.js";
+import { hasMessage, hasSenderMessage, savePrintLog, setPrintStatus } from "./db.js";
 import { logger } from "./logger.js";
 import { savePrintDuration } from "./printMetrics.js";
 import { sendSystemAlert } from "./alerts.js";
@@ -31,7 +31,7 @@ export async function registerAttachment(
   const config = applyLicenseLimits(getConfig());
   const createdAt = new Date().toISOString();
 
-  if (hasMessage(attachment.messageKey)) {
+  if (hasMessage(attachment.messageKey) || hasSenderMessage(attachment.senderPhone, messageIdFromKey(attachment.messageKey))) {
     return writeLog(attachment, config, createdAt, "rejected", "Duplicate message");
   }
 
@@ -261,6 +261,10 @@ function normalizeValidationReason(reason: string): string {
   }
 
   return reason;
+}
+
+function messageIdFromKey(messageKey: string): string {
+  return String(messageKey || "").split(":").pop() ?? "";
 }
 
 function attachmentAlertContext(attachment: IncomingAttachment, config: AppConfig) {
