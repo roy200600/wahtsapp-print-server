@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.70";
+const APP_VERSION = "1.0.71";
 
 const state = {
   authenticated: false,

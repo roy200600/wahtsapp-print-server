@@ -20,7 +20,7 @@ import { logger } from "./logger.js";
 import { registerAlertSender, sendSystemAlert } from "./alerts.js";
 import { PrintOrderManager } from "./printOrders.js";
 import { assertLicenseCanRun, getLicenseStatus } from "./license.js";
-import { checkForUpdates, getUpdateStatus, runUpdate } from "./maintenance.js";
+import { checkForUpdates, getUpdateStatus, markUpdateNotificationSent, runUpdate } from "./maintenance.js";
 import { APP_VERSION } from "./version.js";
 import { captureScreen, formatRemoteSupportCaption, getRemoteSupportStatus, startRemoteSupportSession } from "./remoteSupport.js";
 
@@ -38,6 +38,7 @@ export class WhatsAppService {
   private listeners = new Set<StatusListener>();
   private intentionalStop = false;
   private reconnectTimer?: NodeJS.Timeout;
+  private updateCompletionTimer?: NodeJS.Timeout;
   private readonly printOrders: PrintOrderManager;
 
   constructor(private readonly getConfig: () => AppConfig) {
@@ -72,6 +73,7 @@ export class WhatsAppService {
     registerAlertSender(async (phone, text) => {
       await this.sendTextToPhone(phone, text);
     });
+    this.startUpdateCompletionWatcher();
 
     this.socket.ev.on("creds.update", saveCreds);
     this.socket.ev.on("connection.update", async (update) => {
@@ -115,6 +117,10 @@ export class WhatsAppService {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = undefined;
+    }
+    if (this.updateCompletionTimer) {
+      clearInterval(this.updateCompletionTimer);
+      this.updateCompletionTimer = undefined;
     }
 
     const socket = this.socket;
@@ -261,8 +267,11 @@ export class WhatsAppService {
     const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
     try {
       await this.sendText(targetJid, "עדכון ענן התקבל. המערכת מתחילה לעדכן ברקע ותיטען מחדש בעוד כדקה.");
-      const result = await runUpdate();
+      const result = await runUpdate({ notifyJid: targetJid });
       logger.warn({ senderPhone, result }, "Owner cloud update command accepted");
+      if (!result.started) {
+        await this.sendText(targetJid, result.message).catch(() => {});
+      }
       sendSystemAlert("עדכון ענן הופעל", `פקודת עדכון הופעלה מרחוק על ידי ${senderPhone}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -416,6 +425,48 @@ export class WhatsAppService {
       const message = error instanceof Error ? error.message : String(error);
       logger.error({ err: error, senderPhone }, "Owner log export command failed");
       await this.sendText(targetJid, `שליחת קבצי לוג נכשלה: ${message}`).catch(() => {});
+    }
+  }
+
+  private startUpdateCompletionWatcher(): void {
+    if (this.updateCompletionTimer) {
+      return;
+    }
+
+    const check = () => {
+      void this.sendPendingUpdateCompletionNotification();
+    };
+    this.updateCompletionTimer = setInterval(check, 20 * 1000);
+    setTimeout(check, 5000);
+  }
+
+  private async sendPendingUpdateCompletionNotification(): Promise<void> {
+    const status = getUpdateStatus();
+    if (!this.socket || !this.state.connected || !status.notifyJid || status.notificationSent) {
+      return;
+    }
+    if (status.status !== "completed" && status.status !== "failed") {
+      return;
+    }
+
+    const icon = status.status === "completed" ? "✅" : "❌";
+    const title = status.status === "completed" ? "עדכון ענן הסתיים בהצלחה" : "עדכון ענן נכשל";
+    const lines = [
+      `${icon} ${title}`,
+      "",
+      `גרסה פעילה: ${APP_VERSION}`,
+      `סטטוס: ${status.status}`,
+      `פירוט: ${status.message}`,
+      status.exitCode !== undefined && status.exitCode !== null ? `קוד יציאה: ${status.exitCode}` : "",
+      status.finishedAt ? `זמן סיום: ${new Date(status.finishedAt).toLocaleString("he-IL")}` : "",
+      status.logPath ? `לוג: ${status.logPath}` : ""
+    ].filter(Boolean);
+
+    try {
+      await this.sendText(status.notifyJid, lines.join("\n"));
+      markUpdateNotificationSent();
+    } catch (error) {
+      logger.error({ err: error, status }, "Failed to send update completion notification");
     }
   }
 

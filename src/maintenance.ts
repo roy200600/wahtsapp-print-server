@@ -5,6 +5,7 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { appPaths, rootDir } from "./paths.js";
 import { APP_VERSION } from "./version.js";
+import { getPowerShellPath } from "./powershell.js";
 
 const execFileAsync = promisify(execFile);
 const startupShortcutName = "MY-PC WhatsApp Print Server.lnk";
@@ -65,10 +66,10 @@ export async function enableStartup(): Promise<{ enabled: boolean; shortcutPath:
 
   const shortcutPath = getStartupShortcutPath();
   const scriptPath = getStartupScriptPath();
-  const powershellPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+  const powershellPath = getPowerShellPath();
   const argumentsText = `-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptPath}"`;
 
-  await execFileAsync("powershell.exe", [
+  await execFileAsync(powershellPath, [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -155,6 +156,9 @@ export type UpdateRunStatus = {
   finishedAt?: string;
   exitCode?: number | null;
   logPath: string;
+  notifyJid?: string;
+  notificationSent?: boolean;
+  notificationSentAt?: string;
 };
 
 export function getUpdateStatus(): UpdateRunStatus {
@@ -182,10 +186,19 @@ export function getUpdateStatus(): UpdateRunStatus {
   }
 }
 
-export async function runUpdate(): Promise<{ started: boolean; message: string; status: UpdateRunStatus }> {
+export async function runUpdate(options: { notifyJid?: string } = {}): Promise<{ started: boolean; message: string; status: UpdateRunStatus }> {
   const scriptPath = path.join(rootDir, "scripts", "update-windows.ps1");
   if (!fs.existsSync(scriptPath)) {
     throw new Error("Update script was not found.");
+  }
+
+  const existingStatus = getUpdateStatus();
+  if (isActiveUpdateStatus(existingStatus)) {
+    return {
+      started: false,
+      message: "עדכון כבר רץ ברקע. המתן להודעת סיום או בדוק סטטוס בעוד כמה דקות.",
+      status: existingStatus
+    };
   }
 
   fs.mkdirSync(appPaths.logsDir, { recursive: true });
@@ -197,49 +210,62 @@ export async function runUpdate(): Promise<{ started: boolean; message: string; 
     status: "starting",
     message: "Update process was queued.",
     startedAt,
-    logPath
+    logPath,
+    notifyJid: options.notifyJid
   };
   fs.writeFileSync(statusPath, JSON.stringify(initialStatus, null, 2), "utf8");
   fs.writeFileSync(logPath, `MY-PC update started at ${startedAt}\r\n`, "utf8");
   fs.writeFileSync(wrapperPath, updateWrapperScript(scriptPath, statusPath, logPath, rootDir), "utf8");
 
-  const powershellPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-  const outFd = fs.openSync(logPath, "a");
-  const child = spawn(powershellPath, [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-WindowStyle",
-    "Hidden",
-    "-File",
-    wrapperPath
-  ], {
-    detached: true,
-    windowsHide: true,
-    stdio: ["ignore", outFd, outFd]
-  });
-  child.on("error", (error) => {
+  const powershellPath = getPowerShellPath();
+  try {
+    await execFileAsync(powershellPath, [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      [
+        `$powerShell = ${JSON.stringify(powershellPath)}`,
+        `$wrapper = ${JSON.stringify(wrapperPath)}`,
+        `$workingDir = ${JSON.stringify(rootDir)}`,
+        "$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"' + $wrapper + '\"'",
+        "Start-Process -FilePath $powerShell -ArgumentList $arguments -WorkingDirectory $workingDir -WindowStyle Hidden"
+      ].join("; ")
+    ]);
+  } catch (error) {
     try {
       fs.writeFileSync(statusPath, JSON.stringify({
         status: "failed",
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
         startedAt,
         finishedAt: new Date().toISOString(),
         exitCode: 1,
-        logPath
+        logPath,
+        notifyJid: options.notifyJid
       }, null, 2), "utf8");
     } catch {}
-  });
-  child.on("close", () => {
-    try { fs.closeSync(outFd); } catch {}
-  });
-  child.unref();
+  }
 
   return {
     started: true,
     message: "העדכון הופעל ברקע. המערכת שומרת לוג עדכון ותנסה להחזיר את השרת גם אם העדכון ייכשל.",
     status: initialStatus
   };
+}
+
+export function markUpdateNotificationSent(): UpdateRunStatus {
+  const current = getUpdateStatus();
+  if (current.status !== "completed" && current.status !== "failed") {
+    return current;
+  }
+
+  const next: UpdateRunStatus = {
+    ...current,
+    notificationSent: true,
+    notificationSentAt: new Date().toISOString()
+  };
+  fs.writeFileSync(getUpdateStatusPath(), JSON.stringify(next, null, 2), "utf8");
+  return next;
 }
 
 export function getCurrentVersion(): string {
@@ -285,6 +311,7 @@ function getUpdateLogPath(): string {
 
 function updateWrapperScript(scriptPath: string, statusPath: string, logPath: string, projectRoot: string): string {
   const startScript = path.join(projectRoot, "scripts", "start-windows.ps1");
+  const powershellPath = getPowerShellPath();
   return [
     "$ErrorActionPreference = 'Stop'",
     "$startedAt = (Get-Date).ToString('o')",
@@ -292,8 +319,12 @@ function updateWrapperScript(scriptPath: string, statusPath: string, logPath: st
     `$logPath = ${JSON.stringify(logPath)}`,
     `$scriptPath = ${JSON.stringify(scriptPath)}`,
     `$startScript = ${JSON.stringify(startScript)}`,
+    `$powerShellPath = ${JSON.stringify(powershellPath)}`,
+    "$existing = $null",
+    "try { $existing = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json } catch {}",
     "function Write-UpdateStatus($State, $Message, $ExitCode) {",
     "  $payload = @{ status = $State; message = $Message; startedAt = $startedAt; finishedAt = (Get-Date).ToString('o'); exitCode = $ExitCode; logPath = $logPath }",
+    "  if ($existing -and $existing.notifyJid) { $payload.notifyJid = [string]$existing.notifyJid }",
     "  $payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statusPath -Encoding UTF8",
     "}",
     "Write-UpdateStatus 'running' 'Update script is running.' $null",
@@ -308,7 +339,7 @@ function updateWrapperScript(scriptPath: string, statusPath: string, logPath: st
     "  Write-UpdateStatus 'failed' $message 1",
     "  try {",
     "    Add-Content -LiteralPath $logPath -Value 'Trying to restart the existing server after update failure.'",
-    "    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript -Hidden *>&1 | Tee-Object -FilePath $logPath -Append",
+    "    & $powerShellPath -NoProfile -ExecutionPolicy Bypass -File $startScript -Hidden *>&1 | Tee-Object -FilePath $logPath -Append",
     "  } catch {",
     "    Add-Content -LiteralPath $logPath -Value ('Server restart after update failure also failed: ' + $_.Exception.Message)",
     "  }",
@@ -377,7 +408,7 @@ function getCurrentRevision(): string {
 
 async function getLatestVersion(): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("powershell.exe", [
+    const { stdout } = await execFileAsync(getPowerShellPath(), [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
@@ -396,7 +427,7 @@ async function getLatestVersion(): Promise<string> {
 
 async function getLatestRevision(): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("powershell.exe", [
+    const { stdout } = await execFileAsync(getPowerShellPath(), [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
@@ -411,6 +442,20 @@ async function getLatestRevision(): Promise<string> {
   } catch {
     return "unknown";
   }
+}
+
+function isActiveUpdateStatus(status: UpdateRunStatus): boolean {
+  if (status.status !== "starting" && status.status !== "running") {
+    return false;
+  }
+
+  const startedAt = status.startedAt ? Date.parse(status.startedAt) : 0;
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    return false;
+  }
+
+  const maxAgeMs = status.status === "starting" ? 2 * 60 * 1000 : 30 * 60 * 1000;
+  return Date.now() - startedAt < maxAgeMs;
 }
 
 function compareVersions(a: string, b: string): number {
