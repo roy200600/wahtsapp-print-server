@@ -282,6 +282,19 @@ export class WhatsAppService {
   private async handleOwnerCloudUpdateCommand(remoteJid: string, senderPhone: string): Promise<void> {
     const targetJid = remoteJid || (await this.resolvePhoneJid(senderPhone));
     try {
+      const update = await checkForUpdates();
+      if (!update.available) {
+        await this.sendText(targetJid, [
+          "✅ השרת כבר מעודכן.",
+          "",
+          `גרסה פעילה: ${APP_VERSION}`,
+          `גרסה ב-GitHub: ${update.latest}`,
+          "לא הופעל תהליך עדכון כי אין גרסה חדשה."
+        ].join("\n"));
+        logger.warn({ senderPhone, update }, "Owner cloud update command skipped because server is current");
+        return;
+      }
+
       await this.sendText(targetJid, "עדכון ענן התקבל. המערכת מתחילה לעדכן ברקע ותיטען מחדש בעוד כדקה.");
       const result = await runUpdate({ notifyJid: targetJid });
       logger.warn({ senderPhone, result }, "Owner cloud update command accepted");

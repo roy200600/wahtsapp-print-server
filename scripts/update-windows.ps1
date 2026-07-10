@@ -29,6 +29,22 @@ function Invoke-Checked($FilePath, [string[]]$Arguments) {
   }
 }
 
+function Copy-UpdateItem($SourceItem, $DestinationPath) {
+  if ($SourceItem.PSIsContainer) {
+    New-Item -ItemType Directory -Force -Path $DestinationPath | Out-Null
+    Get-ChildItem -LiteralPath $SourceItem.FullName -Force | ForEach-Object {
+      Copy-UpdateItem $_ (Join-Path $DestinationPath $_.Name)
+    }
+    return
+  }
+
+  $DestinationDir = Split-Path -Parent $DestinationPath
+  if (-not [string]::IsNullOrWhiteSpace($DestinationDir)) {
+    New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
+  }
+  Copy-Item -LiteralPath $SourceItem.FullName -Destination $DestinationPath -Force
+}
+
 function Enable-PortableNodePath($ProjectRoot, $NodeExe) {
   $NodeDir = Split-Path -Parent $NodeExe
   $ShimDir = Join-Path $ProjectRoot "runtime\bin"
@@ -397,7 +413,7 @@ Write-Host "Copying update files..."
 Get-ChildItem $Source.FullName -Force | ForEach-Object {
   $relative = $_.Name
   if ($Preserve -contains $relative) { return }
-  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $ProjectRoot $relative) -Recurse -Force
+  Copy-UpdateItem $_ (Join-Path $ProjectRoot $relative)
 }
 
 Set-Location -LiteralPath $ProjectRoot
@@ -412,7 +428,7 @@ Repair-StartupShortcut $ProjectRoot
 
 Write-Host "Installing dependencies..."
 if (Test-Path "package-lock.json") {
-  Invoke-Checked $NpmCmd @("ci")
+  Invoke-Checked $NpmCmd @("install")
 } else {
   Invoke-Checked $NpmCmd @("install")
 }
